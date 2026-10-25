@@ -110,11 +110,12 @@
       <div class="row">
         <label>Asset<select id="r-asset"></select></label>
         <label>Amount<input id="r-amount" value="10" inputmode="numeric"></label>
+        <label>Expires in<select id="r-expiry"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="604800">1 week</option><option value="">never</option></select></label>
         <button id="invoice">Make an invoice</button>
       </div>
       <div id="invoice-out"></div>
       <div id="open-invoices"></div>
-      <p class="small" id="inbox-note">Transfers sent to this wallet over Nostr are taken in when it refreshes.</p>
+      <p class="small" id="inbox-note">Transfers sent to this wallet over Nostr are taken in as they arrive while this tab is open, and when it refreshes.</p>
       <div class="row"><label>Got a transfer file? Take it in<input type="file" id="accept-file" accept=".rgb"></label></div>
       <div id="accept-out"></div>
     </section>

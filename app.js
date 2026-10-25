@@ -9,7 +9,7 @@ import { parentTxEvent, publish } from './lib/nostr.js'
 import { WALLET, load, save, wipe } from './lib/store.js'
 import { addressScript } from './lib/address.js'
 import { agreesWithSignedTip, signedTip, verifyMined } from './lib/spv.js'
-import { inbox, nostrKey, sendTo } from './lib/deliver.js'
+import { inbox, listen, nostrKey, sendTo } from './lib/deliver.js'
 import { buildTx, outpointOf, parseTx, signTx, txid as txidOf, vsizeOf } from './lib/tx.js'
 
 const { v012 } = rgbjs
@@ -115,6 +115,7 @@ function start () {
   $('#address').textContent = v012.deriveAddress(w.descriptor, '&0/0').address
   $('#api').textContent = chain.apiBase()
   refresh().then(openLink)
+  startListening()
 }
 
 window.addEventListener('hashchange', () => { if (w) openLink() })
@@ -201,7 +202,8 @@ function computeHoldings () {
 
 // A coin an invoice of yours points at, with nothing received on it yet: a
 // payment may still land there, so plain sends leave it alone.
-const awaited = outpoint => state.seals.some(s => s.outpoint === outpoint && !s.cancelled) && !assetsOn(outpoint).length
+const expired = s => s.expiry && s.expiry < Date.now() / 1000
+const awaited = outpoint => state.seals.some(s => s.outpoint === outpoint && !s.cancelled && !expired(s)) && !assetsOn(outpoint).length
 const plainCoins = () => coins.filter(c => !assetsOn(c.outpoint).length && !awaited(c.outpoint))
 const assetsOn = outpoint => [...holdings].filter(([, h]) => h.cells.some(c => c.outpoint === outpoint)).map(([id]) => id)
 const total = h => h.cells.reduce((n, c) => /^\d+$/.test(c.value) ? n + BigInt(c.value) : n, 0n)
@@ -278,11 +280,12 @@ function render () {
 // coin for plain sends; its secret stays, so a late payment is still seen.
 function renderOpenInvoices () {
   const mine = new Set(coins.map(c => c.outpoint))
-  const open = state.seals.filter(s => !s.cancelled && mine.has(s.outpoint) && !assetsOn(s.outpoint).length)
+  const open = state.seals.filter(s => !s.cancelled && !expired(s) && mine.has(s.outpoint) && !assetsOn(s.outpoint).length)
+  const left = s => { const m = Math.round((s.expiry - Date.now() / 1000) / 60); return m < 120 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} days` }
   $('#open-invoices').replaceChildren(...(open.length ? [el('h3', { class: 'small' }, 'Open invoices')] : []), ...open.map(s => {
     const h = holdings.get(s.contractId)
     return el('div', { class: 'row small' },
-      el('span', {}, `${amount(h, s.value)} to coin ${short(s.outpoint)}`),
+      el('span', {}, `${amount(h, s.value)} to coin ${short(s.outpoint)}${s.expiry ? `, expires in ${left(s)}` : ''}`),
       el('button', { class: 'quiet', onclick: e => copy(s.invoice, e.target) }, 'Copy'),
       el('button', { class: 'quiet', onclick: e => copy(payLink(s.invoice), e.target) }, 'Pay link'),
       el('button', { class: 'quiet', onclick: e => { const row = e.target.closest('.row'); row.nextElementSibling?.classList.contains('qr') ? row.nextElementSibling.remove() : row.after(qr(payLink(s.invoice)) ?? '') } }, 'QR'),
@@ -291,6 +294,27 @@ function renderOpenInvoices () {
 }
 
 // Transfers sent to this wallet over Nostr, taken in once each.
+async function takeInDelivered (it) {
+  try {
+    takeIn(await gunzip(fromB64url(it.message.transfer)))
+    $('#accept-out').prepend(el('p', { class: 'small' }, `Delivered over Nostr${it.message.txid ? `, witness ${short(it.message.txid)}` : ''}:`))
+    return true
+  } catch { return false } // not for this wallet's invoices, or not valid: ignored
+}
+
+let stopListening = null
+function startListening () {
+  stopListening?.()
+  stopListening = listen(nk, async it => {
+    const seen = new Set(state.inboxSeen ?? [])
+    if (seen.has(it.id)) return
+    seen.add(it.id)
+    state.inboxSeen = [...seen].slice(-200)
+    persist()
+    if (await takeInDelivered(it)) { $('#receive-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); setTimeout(refresh, 1500) }
+  })
+}
+
 async function checkInbox () {
   const since = state.inboxSince ?? Math.floor(Date.now() / 1000) - 30 * 86400
   const items = await inbox(nk, { since }).catch(() => [])
@@ -300,10 +324,7 @@ async function checkInbox () {
     newest = Math.max(newest, it.created_at)
     if (seen.has(it.id)) continue
     seen.add(it.id)
-    try {
-      takeIn(await gunzip(fromB64url(it.message.transfer)))
-      $('#accept-out').prepend(el('p', { class: 'small' }, `Delivered over Nostr${it.message.txid ? `, witness ${short(it.message.txid)}` : ''}:`))
-    } catch {} // not for this wallet's invoices, or not valid: ignored
+    await takeInDelivered(it)
   }
   state.inboxSeen = [...seen].slice(-200)
   state.inboxSince = Math.max(since, newest - 3600)
@@ -443,8 +464,10 @@ $('#invoice').addEventListener('click', guard('#invoice-out', () => {
   const coin = coins.find(c => !assetsOn(c.outpoint).length) ?? coins.find(c => assetsOn(c.outpoint).every(x => x === id))
   if (!coin) throw new Error('Every coin here already carries another asset, and Bunting keeps one asset per coin. Send yourself another coin first.')
   const nonce = state.nonce++
-  const inv = v012.createInvoice({ contractId: id, value, outpoint: coin.outpoint, noiseSeed: w.noiseSeed, nonce })
-  state.seals.push({ contractId: id, outpoint: coin.outpoint, nonce, invoice: inv.invoice, value, at: new Date().toISOString() })
+  const ttl = Number($('#r-expiry').value)
+  const expiry = ttl ? Math.floor(Date.now() / 1000) + ttl : undefined
+  const inv = v012.createInvoice({ contractId: id, value, outpoint: coin.outpoint, noiseSeed: w.noiseSeed, nonce, expiry })
+  state.seals.push({ contractId: id, outpoint: coin.outpoint, nonce, invoice: inv.invoice, value, expiry, at: new Date().toISOString() })
   if (!state.contracts[id]) state.contracts[id] = { files: [] }
   persist()
   const button = el('span', {}, el('button', { class: 'quiet', onclick: e => copy(inv.invoice, e.target) }, 'Copy invoice'), ' ',
@@ -497,6 +520,7 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   const invoice = $('#p-invoice').value.trim()
   const inv = rgbjs.parseInvoice(invoice)
   if (inv.line !== 'v0.12') throw new Error('Bunting pays RGB v0.12 invoices only.')
+  if (inv.expiry && inv.expiry < Date.now() / 1000) throw new Error(`This invoice expired on ${new Date(inv.expiry * 1000).toLocaleString()}. Ask the payee for a new one.`)
   const id = inv.contractId
   const h = holdings.get(id)
   if (!h || !h.cells.length) throw new Error('You hold none of this asset here.')
