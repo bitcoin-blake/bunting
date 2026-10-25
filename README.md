@@ -1,24 +1,42 @@
 # Bunting
 
-RGB assets on the Bitcoin BLAKE2b chain (txbt4), in a browser tab: issue a token, make an invoice, pay one, and take a payment in.
+RGB assets on the Bitcoin BLAKE2b testnet4 (txbt4), in a browser tab: issue a token, make an invoice, pay one, and take a payment in.
 
 - **[bitcoin-blake.github.io/bunting](https://bitcoin-blake.github.io/bunting/)**: the wallet.
 - **[test.html](https://bitcoin-blake.github.io/bunting/test.html)**: its tests, run in your browser.
+- **[RGB on the BLAKE2b testnet4](https://rgb-docs.github.io/guides/development/rgb-on-blake/)**: why RGB works on txbt4, and the payments mined with Bunting.
 
-Test coins only. One random seed kept in this tab gives a BIP86 taproot account, the keys that sign, and the RGB secrets. Nothing leaves the tab except the requests to the chain's explorer (coins, transactions, broadcast) at [mempool.guide](https://mempool.guide/testnet4/). Override it with `?api=<esplora url>`.
+**Test coins only.** One random seed kept in this tab (in `localStorage`) gives a BIP 86 taproot account (`m/86'/1'/0'`), the keys that sign, and the RGB secrets.
 
-RGB is [rgbjs](https://rgbjs.com) (RGB v0.12, the RGB-WG crates compiled to wasm): it validates every file, builds each payment as an unsigned PSBT, and never holds a key. Bunting signs the transaction itself (BIP341 key path, checked against the BIP's own test vectors in `test.html`) and broadcasts it. The BLAKE2b fork changes block headers and proof of work, not transactions, so RGB works on it unchanged.
+## What it does
+
+- **Issue** an RGB20 token (ticker, fixed supply) or an RGB25 asset (no ticker, with terms) on one of your coins. Issuing costs nothing on chain.
+- **Invoice.** The payment lands on a coin with no other asset on it. Invoices come with a pay link (`?pay=<invoice>`) and its QR code: scanned on a phone, it opens Bunting with the invoice ready. Open invoices can be cancelled; their secret is kept, so a late payment is still seen.
+- **Pay.** [rgbjs](https://rgbjs.com) builds the payment as an unsigned PSBT with a **tapret** commitment (no `OP_RETURN`, which some nodes refuse). Bunting signs it itself (BIP 341 key path, checked against the BIP's own test vectors) and broadcasts it to the explorer and to Nostr relays (kind 23503, as Reef does). The fee is a sat/vB rate, prefilled from the explorer's estimate, and exact for the transaction's size. The payee gets the transfer as a link (`#transfer=…`, after `#` so it never reaches a web server) or a file.
+- **Take a transfer in** from its link or file: rgbjs validates it and finds what it pays to your invoices.
+- **Send tBTC** and **split coins** into spare ones, never spending a coin that carries an asset or that an open invoice points at. A send waiting for a block can have its fee raised (BIP 125).
+- **Back up and restore assets.** The seed brings back the keys; the asset backup (JSON, no keys) brings back the contract files, invoice secrets and tapret change records, which the seed can't.
+- **Check confirmations in the tab**, not on the explorer's word (`lib/spv.js`): each witness's merkle proof against its block header; each v2 header's BLAKE2b proof of work (with the hasher from [bitcoin-desktop/schema](https://github.com/bitcoin-desktop/schema), pinned), committed height, time and difficulty (testnet4's rules as the fork keeps them); every link up to the tip; and the tip the chain's publisher signs on Nostr ([NIP-333](https://nip-333.github.io/)). A signed tip more than six hours old is shown with its age and not relied on.
+- **Several wallets** in one browser with `?wallet=<name>`, and a short getting-started guide for a new one.
+
+Each coin carries at most one asset, and Bunting won't sign a payment that would also spend a coin carrying another asset, which would lose it.
+
+The explorer is [mempool.guide](https://mempool.guide/testnet4/) (an Esplora API); `?api=<esplora url>` uses another. Bunting talks to it for coins, transactions, broadcasts and headers, to Nostr relays for broadcasts and the signed tip, and to the CDNs below for code. Nothing else leaves the tab.
 
 ## Layout
 
 - `index.html`, `app.js`: the wallet.
-- `lib/keys.js`: the seed, the BIP86 account and its keys.
-- `lib/tx.js`: parsing, serializing and signing transactions.
+- `lib/keys.js`: the seed, the BIP 86 account, its keys and tweaks.
+- `lib/tx.js`: parsing, building, serializing and signing transactions.
+- `lib/address.js`: segwit addresses (BIP 173, BIP 350) to scripts.
 - `lib/esplora.js`: the chain, from an Esplora API.
-- `lib/store.js`: what the tab keeps (in `localStorage`).
-- `lib/deps.js`: the only third-party code, pinned: `@scure/bip32` and `@noble/curves` 2.4.0.
+- `lib/spv.js`: confirmations checked in the tab.
+- `lib/nostr.js`: broadcasting through Nostr relays.
+- `lib/store.js`: what the tab keeps.
+- `lib/deps.js`: third-party code, pinned: `@scure/bip32` and `@noble/curves` 2.4.0 (jsDelivr). Also `qrcode-generator` 1.4.4 (`index.html`), the schema repo's BLAKE2b hasher at a fixed commit (`lib/spv.js`), and rgbjs from [rgbjs.com](https://rgbjs.com).
+- `scripts/og.py`: draws `og.png`.
 
-Plain ES modules, no build step, served from `gh-pages`.
+Plain ES modules, no build step, served from `gh-pages`. The tests are in `test.html` and run in a browser.
 
 ## License
 
