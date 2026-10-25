@@ -494,6 +494,9 @@ function takeIn (bytes) {
     const rec = v012.receive(bytes, { outpoint: s.outpoint, noiseSeed: w.noiseSeed, nonce: s.nonce }).receive
     got.push(...rec.received)
   }
+  // A transfer carries earlier payments as history: report only what is new.
+  const known = new Set(holdings.get(r.contractId)?.witnesses ?? [])
+  const fresh = got.filter(g => !known.has(g.witness))
   const isOurs = Object.prototype.hasOwnProperty.call(state.contracts, r.contractId) && state.contracts[r.contractId].files.length
   if (!got.length && !isOurs) throw new Error('This transfer isn\'t for any invoice made in this wallet.')
   const b64 = toBase64(bytes)
@@ -503,12 +506,12 @@ function takeIn (bytes) {
   computeHoldings(); render(); checkWitnesses()
   const s = rgbjs.assetSummary(r)
   const h = holdings.get(r.contractId)
-  $('#accept-out').replaceChildren(got.length
+  $('#accept-out').replaceChildren(fresh.length
     ? note(r.issuer?.trusted ? 'ok' : 'warn',
-      `Received ${got.map(g => amount(h, g.value)).join(' and ')} of ${s.name ?? 'an asset'} by witness transaction ${short(got[0].witness ?? '')}. `,
+      `Received ${fresh.map(g => amount(h, g.value)).join(' and ')} of ${s.name ?? 'an asset'} by witness transaction ${short(fresh[0].witness ?? '')}. `,
       r.issuer?.trusted ? 'Its issuer is a standard one rgbjs trusts. ' : 'Careful: its issuer isn\'t one rgbjs trusts, so what its state means is the sender\'s word. ',
       'It is yours once that transaction is mined: see Assets.')
-    : note('warn', 'Taken in, but nothing in it is paid to your invoices.'))
+    : got.length ? note('', 'Already had this payment.') : note('warn', 'Taken in, but nothing in it is paid to your invoices.'))
 }
 
 // ---- pay -----------------------------------------------------------------
