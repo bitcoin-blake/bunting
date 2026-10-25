@@ -3,6 +3,7 @@ import { bytesToHex, hexToBytes } from './lib/bytes.js'
 import { schnorr } from './lib/deps.js'
 import { tweak, wallet } from './lib/keys.js'
 import { parentTxEvent } from './lib/nostr.js'
+import { blockHash, merkleRoot, parseHeader, powOk, target } from './lib/spv.js'
 import { addressScript } from './lib/address.js'
 import { buildTx, vsizeOf } from './lib/tx.js'
 import { outpointOf, parseTx, serializeTx, signTx, taprootSighash, txid } from './lib/tx.js'
@@ -136,6 +137,30 @@ await test('a plain send builds, signs and has the estimated size', () => {
   eq(outpointOf(tx.ins[0]), coin.outpoint, 'spends the coin')
   const weight = serializeTx(tx, { witness: false }).length * 3 + serializeTx(tx).length
   eq(Math.ceil(weight / 4), vsizeOf(1, outs.map(o => o.script)), 'vsize estimate')
+})
+
+// Block 153,567 of the BLAKE2b testnet4, which mined the Alice-to-Bob payment.
+const H153567 = '000000a0d0efd9aee815106c06a6c1045beb40edb6ebd18e542ad90d1dbd6348000000004baad255e7636ffc8f0af35952d3e9a28be75467dd883b401350817a8df168481af9dd6affff001d3cfc370000000000da24010000000000000000024242424242424242000000000600000000000000000000000000000000000000df5702000000000000000000000000000000000000000000000000000000000000000000'
+const H153566 = '000000a0755ba51c353541d873191be6811d1e1b9d5cd77bcf820183ec7b08fc000000006c4258f39b38a92eaa4810c8862f3ad4e9ab1f1c3c1643d5780a7144270d67552df4dd6affff001dc8201000000000006f23010000000000000000024242424242424242000000000100000000000000000000000000000000000000de5702000000000000000000000000000000000000000000000000000000000000000000'
+
+await test('a BLAKE2b v2 header parses, hashes to its block hash and meets its target', () => {
+  const h = parseHeader(H153567)
+  eq(h.height, 153567, 'committed height')
+  eq(blockHash(h), '00000000ec1dee306434956ddc0c4818db98b7e57cc43fe8c0d562329fc0b365', 'block hash')
+  eq(h.merkleRoot, '4868f18d7a815013403b88dd6754e78ba2e9d35259f30a8ffc6f63e755d2aa4b', 'merkle root')
+  eq(powOk(h), true, 'proof of work')
+  eq(target(0x1d00ffff), 0x00000000ffff0000000000000000000000000000000000000000000000000000n, 'target from bits')
+  eq(h.prevBlockHash, blockHash(parseHeader(H153566)), 'links to block 153,566')
+  const tampered = parseHeader(H153567.slice(0, 160) + 'ff' + H153567.slice(162)) // a nonce byte
+  eq(powOk(tampered), false, 'a changed nonce fails the target')
+})
+
+await test('a merkle proof leads from the txid to the header\'s merkle root', () => {
+  const merkle = ['d728fae77cf9e3fe01aeceeef03ad230a134464943dc6d573e0308d0e2888db8', '3a48951bcc91e847a32ee7ef30682aba5e74b1a1fcc5621e0f62d7ebc8ed7515', '186b6b99baf65cdb379737f34c1bde2adb8558342a0a61945baf2e974be41297']
+  const txid = '3e0bafc938cb94c0d9f33f6a85824ccbfe7bfb6a9283e7f721e29a4386b1ae6d'
+  eq(merkleRoot(txid, merkle, 2), parseHeader(H153567).merkleRoot, 'root')
+  if (merkleRoot(txid, merkle, 3) === parseHeader(H153567).merkleRoot) throw new Error('a wrong position still matched')
+  if (merkleRoot('00'.repeat(32), merkle, 2) === parseHeader(H153567).merkleRoot) throw new Error('another txid still matched')
 })
 
 const failed = results.filter(r => !r).length

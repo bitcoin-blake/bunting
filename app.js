@@ -8,6 +8,7 @@ import { wallet } from './lib/keys.js'
 import { parentTxEvent, publish } from './lib/nostr.js'
 import { WALLET, load, save, wipe } from './lib/store.js'
 import { addressScript } from './lib/address.js'
+import { agreesWithSignedTip, signedTip, verifyMined } from './lib/spv.js'
 import { buildTx, outpointOf, parseTx, signTx, txid as txidOf, vsizeOf } from './lib/tx.js'
 
 const { v012 } = rgbjs
@@ -203,18 +204,36 @@ function render () {
   )
 }
 
+// Confirmations are checked in this tab: merkle proof, header proof of work,
+// header links up to the tip (lib/spv.js), and the tip against the one the
+// publisher signs on Nostr. The explorer supplies the data, not the verdict.
 async function checkWitnesses () {
+  let tipHeight
+  try { tipHeight = await chain.tip() } catch { return }
+  const signed = signedTip().catch(() => null)
   for (const [id, h] of holdings) {
     const cell = document.getElementById(`w-${id.replace(/[^A-Za-z0-9]/g, '')}`)
     if (!cell || !h.witnesses.length) continue
     try {
-      const c = await rgbjs.checkWitnesses(h.witnesses, { server: chain.apiBase() })
-      const waiting = c.results.filter(x => x.state !== 'mined')
-      const min = Math.min(...c.results.map(x => x.confirmations))
+      const r = await Promise.all(h.witnesses.map(txid => verifyMined(txid, tipHeight)))
+      const waiting = r.filter(x => x.state !== 'verified')
+      const min = Math.min(...r.map(x => x.confirmations))
+      const more = r.some(x => x.confirmations === min && x.more)
       cell.textContent = waiting.length
-        ? `${waiting.length} of ${c.results.length} witness transaction${c.results.length === 1 ? '' : 's'} not mined yet`
-        : `every witness mined, ${min}+ confirmation${min === 1 ? '' : 's'}`
-    } catch (e) { cell.textContent = `couldn't check: ${e.message}` }
+        ? `${waiting.length} of ${r.length} witness transaction${r.length === 1 ? '' : 's'} not mined yet`
+        : `every witness mined, ${min}${more ? '+' : ''} confirmation${min === 1 && !more ? '' : 's'}, checked here`
+      cell.title = 'Merkle proofs, header proof of work and header links checked in this tab; the explorer only supplied the data.'
+    } catch (e) {
+      cell.textContent = `the explorer's answer failed a check: ${e.message}`
+      cell.style.color = 'var(--bad)'
+    }
+  }
+  const s = await signed
+  const agree = await agreesWithSignedTip(s)
+  if (s && agree !== null) {
+    $('#chain').append(agree
+      ? ` · matches the tip signed on Nostr at block ${s.height.toLocaleString()}`
+      : el('span', { style: 'color: var(--bad)' }, ` · disagrees with the tip signed on Nostr at block ${s.height.toLocaleString()}`))
   }
 }
 
