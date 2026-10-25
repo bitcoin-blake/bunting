@@ -22,4 +22,4 @@ Plain ES modules, no build step, served from `gh-pages`.
 
 ## License
 
-MIT
+AGPL-3.0-or-later. See LICENSE.
