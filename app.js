@@ -320,8 +320,8 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   pending = { p, id, invoice, spent }
   const out = parseTx(p.tx).outs
   $('#pay-out').replaceChildren(
-    note('', el('div', {}, `Pays ${amount(h, inv.amount)} for a fee of ${fee} sats. `, `Spends ${spent.length} coin${spent.length === 1 ? '' : 's'}; ${out.length} outputs, the first commits to the RGB transfer.`),
-      el('div', { class: 'mono small' }, `witness ${p.txid}`), el('div', { class: 'small' }, 'The commitment is inside the change output (tapret): no OP_RETURN.')),
+    note('', el('div', {}, `Pays ${amount(h, inv.amount)} for a fee of ${fee} sats. `, `Spends ${spent.length} coin${spent.length === 1 ? '' : 's'} and makes ${out.length} output${out.length === 1 ? '' : 's'}; the change at output ${p.change?.vout} carries the RGB commitment and what's left of the asset.`),
+      el('div', { class: 'mono small' }, `witness ${p.txid}`), el('div', { class: 'small' }, 'The commitment is inside the change output\'s taproot key (tapret), so there is no OP_RETURN output.')),
     note('warn', 'Signing broadcasts the transaction to the BLAKE2b chain, through ', chain.apiBase(), ' and Nostr relays. It can\'t be taken back.',
       el('div', { class: 'row' }, el('button', { id: 'sign', onclick: guard('#pay-out', signAndSend) }, 'Sign and broadcast'), el('button', { class: 'quiet', onclick: () => { pending = null; $('#pay-out').replaceChildren() } }, 'Cancel')))
   )
