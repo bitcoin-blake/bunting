@@ -29,6 +29,7 @@ function el (tag, attrs = {}, ...kids) {
   e.append(...kids.flat().filter(k => k !== null && k !== undefined && k !== false))
   return e
 }
+const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter(k => k !== null && k !== undefined && k !== false))
 const note = (kind, ...text) => el('div', { class: `msg ${kind}` }, ...text)
 const short = s => `${s.slice(0, 10)}…${s.slice(-6)}`
 const link = (path, text) => el('a', { href: chain.explorer(path), target: '_blank', rel: 'noopener' }, text)
@@ -137,7 +138,7 @@ $('#copy-address').addEventListener('click', e => copy($('#address').textContent
 
 function render () {
   const sats = coins.reduce((n, c) => n + c.sats, 0)
-  $('#coins').replaceChildren(
+  fill($('#coins'), 
     el('tr', {}, el('th', {}, 'Coin'), el('th', {}, 'tBTC'), el('th', {}, 'Status'), el('th', {}, 'Carries')),
     ...coins.map(c => el('tr', {},
       el('td', { class: 'mono' }, link(`/tx/${c.outpoint.split(':')[0]}`, short(c.outpoint))),
@@ -148,7 +149,7 @@ function render () {
     coins.length ? el('tr', {}, el('td', { class: 'small' }, `${coins.length} coin${coins.length === 1 ? '' : 's'}`), el('td', {}, (sats / 1e8).toFixed(8)), el('td'), el('td')) : null
   )
   const ids = Object.keys(state.contracts)
-  $('#assets').replaceChildren(
+  fill($('#assets'), 
     el('tr', {}, el('th', {}, 'Asset'), el('th', {}, 'You hold'), el('th', {}, 'On chain')),
     ...ids.map(id => {
       const h = holdings.get(id)
