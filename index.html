@@ -109,6 +109,26 @@
     </section>
 
     <section class="card">
+      <h2>Send tBTC</h2>
+      <p class="small">Spends only coins that carry no asset and aren't waiting for an invoice to be paid, so no RGB asset can be lost here.</p>
+      <div class="row">
+        <label>To address<input id="s-to" class="mono" placeholder="tb1…" autocomplete="off"></label>
+        <label>Amount (sats)<input id="s-amount" inputmode="numeric" placeholder="10000"></label>
+      </div>
+      <div class="row">
+        <label>Fee rate (sat/vB)<input id="s-rate" value="2" inputmode="decimal"></label>
+        <button id="s-build">Build</button>
+      </div>
+      <div class="row">
+        <label>Or split into spare coins of (sats)<input id="s-split-size" value="3000" inputmode="numeric"></label>
+        <label>How many<input id="s-split-n" value="3" inputmode="numeric"></label>
+        <button class="quiet" id="s-split">Split</button>
+      </div>
+      <p class="small">Spare coins are for invoices and new assets: each coin carries at most one asset.</p>
+      <div id="send-out"></div>
+    </section>
+
+    <section class="card">
       <h2>This wallet</h2>
       <p class="small">Explorer: <span id="api"></span>. Add <code>?api=&lt;Esplora URL&gt;</code> to use another.</p>
       <div class="row"><button class="quiet" id="show-seed">Show the seed</button><button class="quiet" id="wipe">Remove this wallet from the tab</button></div>

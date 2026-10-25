@@ -7,12 +7,17 @@ import * as chain from './lib/esplora.js'
 import { wallet } from './lib/keys.js'
 import { parentTxEvent, publish } from './lib/nostr.js'
 import { load, save, wipe } from './lib/store.js'
-import { outpointOf, parseTx, signTx } from './lib/tx.js'
+import { addressScript } from './lib/address.js'
+import { buildTx, outpointOf, parseTx, signTx, txid as txidOf, vsizeOf } from './lib/tx.js'
 
 const { v012 } = rgbjs
 const $ = s => document.querySelector(s)
 // Receive keychain &0 and change keychain &1; rgbjs puts payment change on &1/0.
-const TERMINALS = ['&0/0', '&0/1', '&0/2', '&0/3', '&0/4', '&1/0', '&1/1', '&1/2']
+// &0/5.. hold spare coins from splits, &1/1 the change of plain sends.
+const TERMINALS = [...Array(10).keys()].map(i => `&0/${i}`).concat(['&1/0', '&1/1', '&1/2', '&1/3'])
+const PLAIN_CHANGE = '&1/1'
+const SPARE = ['&0/5', '&0/6', '&0/7', '&0/8', '&0/9']
+const DUST = 330
 // The trusted issuers rgbjs knows: RGB20 fungible tokens and RGB25 assets.
 const ISSUERS = {
   FNA: { codexId: '7C15w3W1-L0T~zXw-Aeh5~kV-Zquz729-HXQFKQW-_5lX9O8', version: 0, checksum: 'AYkSrg' },
@@ -128,6 +133,10 @@ function computeHoldings () {
   }
 }
 
+// A coin an invoice of yours points at, with nothing received on it yet: a
+// payment may still land there, so plain sends leave it alone.
+const awaited = outpoint => state.seals.some(s => s.outpoint === outpoint) && !assetsOn(outpoint).length
+const plainCoins = () => coins.filter(c => !assetsOn(c.outpoint).length && !awaited(c.outpoint))
 const assetsOn = outpoint => [...holdings].filter(([, h]) => h.cells.some(c => c.outpoint === outpoint)).map(([id]) => id)
 const total = h => h.cells.reduce((n, c) => /^\d+$/.test(c.value) ? n + BigInt(c.value) : n, 0n)
 const unit = h => h?.summary?.ticker ?? h?.summary?.name ?? 'units'
@@ -157,7 +166,7 @@ function render () {
       el('td', { class: 'mono' }, link(`/tx/${c.outpoint.split(':')[0]}`, short(c.outpoint))),
       el('td', {}, (c.sats / 1e8).toFixed(8)),
       el('td', {}, c.confirmed ? `block ${c.confirmed}` : 'unconfirmed'),
-      el('td', {}, assetsOn(c.outpoint).map(id => { const h = holdings.get(id); return amount(h, h.cells.filter(x => x.outpoint === c.outpoint).reduce((n, x) => n + BigInt(x.value), 0n)) }).join(', ') || '—'))),
+      el('td', {}, assetsOn(c.outpoint).map(id => { const h = holdings.get(id); return amount(h, h.cells.filter(x => x.outpoint === c.outpoint).reduce((n, x) => n + BigInt(x.value), 0n)) }).join(', ') || (awaited(c.outpoint) ? 'waiting for an invoice' : '—')))),
     coins.length ? null : el('tr', {}, el('td', { colspan: 4, class: 'small' }, 'No coins yet. Send some txbt4 to the address above, mine some in Winch, or ask someone with a txbt4 node.')),
     coins.length ? el('tr', {}, el('td', { class: 'small' }, `${coins.length} coin${coins.length === 1 ? '' : 's'}`), el('td', {}, (sats / 1e8).toFixed(8)), el('td'), el('td')) : null
   )
@@ -374,6 +383,73 @@ async function signAndSend () {
   $('#pay-out').replaceChildren(note('ok', 'Sent: ', link(`/tx/${txid}`, short(txid)), direct.ok ? ' (the explorer has it)' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it, so it shows there once mined)`, '. Now give the payee the transfer file; they need it to see the payment.',
     el('div', { class: 'row' }, el('button', { onclick: () => download(p.transfer, name) }, 'Download the transfer file'))))
   download(p.transfer, name)
+  setTimeout(refresh, 3000)
+}
+
+// ---- send tBTC -------------------------------------------------------------
+
+let pendingSend = null
+
+function planSend (outputs, rate) {
+  if (!(rate >= 1 && rate <= 1000)) throw new Error('The fee rate is a number of sat/vB, at least 1.')
+  for (const o of outputs) if (!Number.isSafeInteger(o.sats) || o.sats < DUST) throw new Error(`Each output is at least ${DUST} sats.`)
+  const want = outputs.reduce((n, o) => n + o.sats, 0)
+  const change = v012.deriveAddress(w.descriptor, PLAIN_CHANGE).scriptPubkey
+  const inputs = []
+  let have = 0
+  for (const c of plainCoins()) {
+    inputs.push(c)
+    have += c.sats
+    const fee = Math.ceil(rate * vsizeOf(inputs.length, [...outputs.map(o => o.script), change]))
+    if (have >= want + fee) {
+      const left = have - want - fee
+      // Change below dust goes to the fee instead.
+      const outs = left >= DUST ? [...outputs, { script: change, sats: left }] : outputs
+      return { inputs, outputs: outs, fee: have - outs.reduce((n, o) => n + o.sats, 0), change: left >= DUST ? left : 0 }
+    }
+  }
+  throw new Error(`Not enough in coins without assets: ${have.toLocaleString()} sats spendable here.`)
+}
+
+function showSend (plan, what) {
+  pendingSend = plan
+  $('#send-out').replaceChildren(
+    note('', `${what} Spends ${plan.inputs.length} coin${plan.inputs.length === 1 ? '' : 's'} (${plan.inputs.map(c => short(c.outpoint)).join(', ')}); fee ${plan.fee} sats${plan.change ? `; ${plan.change.toLocaleString()} sats come back as change` : ''}.`),
+    note('warn', 'Signing broadcasts it to the BLAKE2b chain. It can\'t be taken back.',
+      el('div', { class: 'row' }, el('button', { id: 's-sign', onclick: guard('#send-out', signSend) }, 'Sign and broadcast'), el('button', { class: 'quiet', onclick: () => { pendingSend = null; $('#send-out').replaceChildren() } }, 'Cancel'))))
+}
+
+$('#s-build').addEventListener('click', guard('#send-out', () => {
+  const script = addressScript($('#s-to').value)
+  const sats = Number($('#s-amount').value)
+  if (TERMINALS.some(t => v012.deriveAddress(w.descriptor, t).scriptPubkey === script)) throw new Error('That is this wallet\'s own address: use Split to make spare coins.')
+  showSend(planSend([{ script, sats }], Number($('#s-rate').value)), `Sends ${sats.toLocaleString()} sats to ${$('#s-to').value.trim()}.`)
+}))
+
+$('#s-split').addEventListener('click', guard('#send-out', () => {
+  const size = Number($('#s-split-size').value)
+  const n = Number($('#s-split-n').value)
+  if (!Number.isInteger(n) || n < 1 || n > SPARE.length) throw new Error(`Split into 1 to ${SPARE.length} coins at a time.`)
+  const outputs = SPARE.slice(0, n).map(t => ({ script: v012.deriveAddress(w.descriptor, t).scriptPubkey, sats: size }))
+  showSend(planSend(outputs, Number($('#s-rate').value)), `Makes ${n} spare coin${n === 1 ? '' : 's'} of ${size.toLocaleString()} sats here.`)
+}))
+
+async function signSend () {
+  if (!pendingSend) return
+  const plan = pendingSend
+  pendingSend = null
+  $('#s-sign')?.setAttribute('disabled', '')
+  const hex = buildTx(plan.inputs, plan.outputs)
+  const keys = Object.fromEntries(plan.inputs.map(c => [c.outpoint, { sats: c.sats, script: c.script, key: w.signingKey(c.terminal, c.merkleRoot) }]))
+  const signed = signTx(hex, keys)
+  const id = txidOf(parseTx(signed))
+  const [direct, relayed] = await Promise.all([
+    chain.broadcast(signed).then(t => ({ ok: t === id, text: t }), e => ({ ok: false, text: e.message })),
+    publish(parentTxEvent(signed))
+  ])
+  const relayedOk = Object.values(relayed).filter(r => r === 'ok').length
+  if (!direct.ok && !relayedOk) throw new Error(`Nothing took the transaction. Explorer: ${direct.text}`)
+  $('#send-out').replaceChildren(note('ok', 'Sent: ', link(`/tx/${id}`, short(id)), direct.ok ? '.' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it).`))
   setTimeout(refresh, 3000)
 }
 

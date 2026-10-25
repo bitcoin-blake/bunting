@@ -3,6 +3,8 @@ import { bytesToHex, hexToBytes } from './lib/bytes.js'
 import { schnorr } from './lib/deps.js'
 import { tweak, wallet } from './lib/keys.js'
 import { parentTxEvent } from './lib/nostr.js'
+import { addressScript } from './lib/address.js'
+import { buildTx, vsizeOf } from './lib/tx.js'
 import { outpointOf, parseTx, serializeTx, signTx, taprootSighash, txid } from './lib/tx.js'
 
 const out = document.getElementById('out')
@@ -109,6 +111,31 @@ await test('the Nostr payment event is kind 23503, tagged for tally, and its sig
   const { sha256 } = await import('./lib/deps.js')
   eq(bytesToHex(sha256(new TextEncoder().encode(JSON.stringify([0, ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content])))), ev.id, 'id')
   if (!schnorr.verify(hexToBytes(ev.sig), hexToBytes(ev.id), hexToBytes(ev.pubkey))) throw new Error('signature does not verify')
+})
+
+await test('addresses decode to scripts: BIP173 and BIP350 test vectors, and Bunting\'s own', () => {
+  eq(addressScript('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx'), '0014751e76e8199196d454941c45d1b3a323f1433bd6', 'p2wpkh')
+  eq(addressScript('tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7'), '00201863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262', 'p2wsh')
+  eq(addressScript('tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c'), '5120000000c4a5cad46221b2a187905e5266362b99d5e91c6ce24d165dab93e86433', 'p2tr')
+  const own = rgbjs.v012.deriveAddress(w.descriptor, '&0/5')
+  eq(addressScript(own.address), own.scriptPubkey, 'Bunting\'s address')
+  for (const bad of ['tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsy', 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', 'tb1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7k']) {
+    let threw = false
+    try { addressScript(bad) } catch { threw = true }
+    if (!threw) throw new Error(`accepted ${bad}`)
+  }
+})
+
+await test('a plain send builds, signs and has the estimated size', () => {
+  const { scriptPubkey } = rgbjs.v012.deriveAddress(w.descriptor, '&0/0')
+  const coin = { outpoint: `${'88'.repeat(32)}:1`, sats: 10000 }
+  const outs = [{ script: '0014751e76e8199196d454941c45d1b3a323f1433bd6', sats: 4000 }, { script: scriptPubkey, sats: 5700 }]
+  const signed = signTx(buildTx([coin], outs), { [coin.outpoint]: { sats: coin.sats, script: scriptPubkey, key: w.signingKey('&0/0') } })
+  const tx = parseTx(signed)
+  eq(tx.ins[0].sequence, 0xfffffffd, 'replaceable')
+  eq(outpointOf(tx.ins[0]), coin.outpoint, 'spends the coin')
+  const weight = serializeTx(tx, { witness: false }).length * 3 + serializeTx(tx).length
+  eq(Math.ceil(weight / 4), vsizeOf(1, outs.map(o => o.script)), 'vsize estimate')
 })
 
 const failed = results.filter(r => !r).length
