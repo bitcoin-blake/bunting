@@ -3,6 +3,7 @@ import { bytesToHex, hexToBytes } from './lib/bytes.js'
 import { schnorr } from './lib/deps.js'
 import { tweak, wallet } from './lib/keys.js'
 import { parentTxEvent } from './lib/nostr.js'
+import * as vault from './lib/vault.js'
 import { conversationKey, decrypt, encrypt, paddedLength } from './lib/nip44.js'
 import { blockHash, expectedBits, merkleRoot, parseHeader, powOk, target } from './lib/spv.js'
 import { addressScript } from './lib/address.js'
@@ -190,6 +191,23 @@ await test('NIP-44 v2: the spec\'s vectors for keys, padding, encryption and inv
     try { decrypt(c.payload, hexToBytes(c.conversation_key)) } catch { threw = true }
     if (!threw) throw new Error(`accepted an invalid payload: ${c.note}`)
   }
+})
+
+await test('a wallet backup decrypts with its passphrase, and only with it', async () => {
+  const contents = { seed: '11'.repeat(32), assets: { kind: 'bunting-assets', version: 1, nonce: 4 } }
+  const file = await vault.seal(contents, 'correct horse battery')
+  eq(file.kdf.iterations, 600000, 'iterations')
+  if (JSON.stringify(file).includes('11111111')) throw new Error('the seed shows through')
+  eq(JSON.stringify(await vault.open(JSON.parse(JSON.stringify(file)), 'correct horse battery')), JSON.stringify(contents), 'round trip')
+  let threw = false
+  try { await vault.open(file, 'correct horse batterY') } catch (e) { threw = /Wrong passphrase/.test(e.message) }
+  if (!threw) throw new Error('opened with the wrong passphrase')
+  threw = false
+  try { await vault.open({ ...file, kdf: { ...file.kdf, iterations: 1000 } }, 'correct horse battery') } catch (e) { threw = /too weak/.test(e.message) }
+  if (!threw) throw new Error('accepted a weak key derivation')
+  threw = false
+  try { await vault.seal(contents, 'short') } catch { threw = true }
+  if (!threw) throw new Error('accepted a short passphrase')
 })
 
 const failed = results.filter(r => !r).length

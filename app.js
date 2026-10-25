@@ -7,6 +7,7 @@ import * as chain from './lib/esplora.js'
 import { wallet } from './lib/keys.js'
 import { parentTxEvent, publish } from './lib/nostr.js'
 import { WALLET, load, save, wipe } from './lib/store.js'
+import * as vault from './lib/vault.js'
 import { addressScript } from './lib/address.js'
 import { agreesWithSignedTip, signedTip, verifyMined } from './lib/spv.js'
 import { inbox, listen, nostrKey, sendTo } from './lib/deliver.js'
@@ -147,6 +148,23 @@ $('#create').addEventListener('click', () => {
   state = { ...load(), seed: bytesToHex(crypto.getRandomValues(new Uint8Array(32))) }
   persist(); start()
 })
+$('#vault-restore').addEventListener('click', guard('#vault-out', async () => {
+  const file = $('#vault-file').files[0]
+  if (!file) throw new Error('Choose the backup file first.')
+  let backup
+  try { backup = JSON.parse(await file.text()) } catch { throw new Error('That file isn\'t JSON.') }
+  $('#vault-out').replaceChildren(note('', 'Decrypting…'))
+  const { seed, assets } = await vault.open(backup, $('#vault-pass').value)
+  if (!/^[0-9a-f]{64}$/.test(seed ?? '')) throw new Error('The backup holds no seed.')
+  state = { ...load(), seed }
+  persist()
+  start()
+  const a = restoreAssets(assets)
+  computeHoldings(); render()
+  $('#vault-pass').value = ''
+  $('#backup-out').replaceChildren(note('ok', `Wallet restored, with ${a.files} contract file${a.files === 1 ? '' : 's'} and ${a.seals} invoice${a.seals === 1 ? '' : 's'}.`))
+}))
+
 $('#restore').addEventListener('click', () => {
   const seed = $('#restore-seed').value.trim().toLowerCase()
   if (!/^[0-9a-f]{64}$/.test(seed)) { $('#restore-seed').setCustomValidity('64 hex characters'); $('#restore-seed').reportValidity(); return }
@@ -735,6 +753,16 @@ export function restoreAssets (b) {
   persist()
   return added
 }
+
+$('#vault-save').addEventListener('click', guard('#vault-save-out', async () => {
+  const pass = $('#vault-new').value
+  if (pass !== $('#vault-new2').value) throw new Error('The two passphrases differ.')
+  $('#vault-save-out').replaceChildren(note('', 'Encrypting…'))
+  const file = await vault.seal({ seed: state.seed, assets: assetBackup() }, pass)
+  download(new TextEncoder().encode(JSON.stringify(file, null, 1)), `bunting-wallet${WALLET ? `-${WALLET}` : ''}-${new Date().toISOString().slice(0, 10)}.json`)
+  $('#vault-new').value = $('#vault-new2').value = ''
+  $('#vault-save-out').replaceChildren(note('ok', 'Saved, encrypted. Without the passphrase it can\'t be opened, by you either: keep the passphrase somewhere safe.'))
+}))
 
 $('#backup').addEventListener('click', guard('#backup-out', () => {
   const text = JSON.stringify(assetBackup(), null, 1)

@@ -64,6 +64,8 @@
     <p>A random seed is made and kept in this tab. It holds the keys to your coins and the secrets of your RGB assets: back it up.</p>
     <div class="row"><button id="create">Create a wallet</button></div>
     <div class="row"><label>Or restore from a seed (64 hex characters)<input id="restore-seed" class="mono" autocomplete="off"></label><button class="quiet" id="restore">Restore</button></div>
+    <div class="row"><label>Or from a wallet backup file<input type="file" id="vault-file" accept=".json,application/json"></label><label>Its passphrase<input type="password" id="vault-pass" autocomplete="off"></label><button class="quiet" id="vault-restore">Restore</button></div>
+    <div id="vault-out"></div>
   </section>
 
   <div id="main" hidden>
@@ -153,7 +155,9 @@
     <section class="card">
       <h2>This wallet</h2>
       <p class="small">Explorer: <span id="api"></span>. Add <code>?api=&lt;Esplora URL&gt;</code> to use another, or <code>?wallet=&lt;name&gt;</code> for a separate wallet in this browser.</p>
-      <p class="small">Two backups. The seed brings back the keys; the asset backup brings back what the keys can't: your contract files, your invoices' secrets and your tapret change coins. Make a new asset backup after each payment.</p>
+      <p class="small">The whole-wallet backup holds everything, encrypted with your passphrase: the seed and the assets. Make a new one after each payment. The seed alone brings back the keys but not the assets; the asset backup alone brings back the assets to a wallet that already has the seed.</p>
+      <div class="row"><label>Passphrase<input type="password" id="vault-new" autocomplete="new-password"></label><label>Again<input type="password" id="vault-new2" autocomplete="new-password"></label><button id="vault-save">Back up the whole wallet</button></div>
+      <div id="vault-save-out"></div>
       <div class="row"><button class="quiet" id="backup">Back up assets</button><label>Restore assets from a backup<input type="file" id="restore-file" accept=".json,application/json"></label></div>
       <div id="backup-out"></div>
       <div class="row"><button class="quiet" id="show-seed">Show the seed</button><button class="quiet" id="wipe">Remove this wallet from the tab</button></div>
