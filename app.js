@@ -68,12 +68,14 @@ const b64url = b => toBase64(b).replace(/\+/g, '-').replace(/\//g, '_').replace(
 const fromB64url = s => fromBase64(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4))
 const gzip = async b => new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer())
 const gunzip = async b => new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer())
-const linkTo = (key, value) => `${location.origin}${location.pathname}?${key}=${value}`
+// Pay links use the query string; transfer links put their data after #, so
+// the payment history in them never reaches the web server.
+const linkTo = (key, value, hash = false) => `${location.origin}${location.pathname}${hash ? '#' : '?'}${key}=${value}`
 
 /** The ways to hand a transfer file to its payee: a link to open, or the file. */
 function handOver (bytes, name) {
   return el('div', { class: 'row' },
-    el('button', { onclick: async e => copy(linkTo('transfer', b64url(await gzip(bytes))), e.target) }, 'Copy a link to it'),
+    el('button', { onclick: async e => copy(linkTo('transfer', b64url(await gzip(bytes)), true), e.target) }, 'Copy a link to it'),
     el('button', { class: 'quiet', onclick: () => download(bytes, name) }, 'Download the file'))
 }
 
@@ -98,6 +100,8 @@ function start () {
   $('#api').textContent = chain.apiBase()
   refresh().then(openLink)
 }
+
+window.addEventListener('hashchange', () => { if (w) openLink() })
 
 async function openLink () {
   const q = new URLSearchParams(location.search)
