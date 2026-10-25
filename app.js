@@ -61,9 +61,20 @@ function download (bytes, name) {
   setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
-/** The ways to hand a transfer file to its payee. */
+// Links carry data in the query string (or after #, which stays in the
+// browser): ?pay=<invoice> fills in Pay, ?transfer=<gzip, base64url> takes a
+// transfer in. ?wallet= is kept, so a link can target a named wallet.
+const b64url = b => toBase64(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+const fromB64url = s => fromBase64(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4))
+const gzip = async b => new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer())
+const gunzip = async b => new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer())
+const linkTo = (key, value) => `${location.origin}${location.pathname}?${key}=${value}`
+
+/** The ways to hand a transfer file to its payee: a link to open, or the file. */
 function handOver (bytes, name) {
-  return el('div', { class: 'row' }, el('button', { onclick: () => download(bytes, name) }, 'Download the transfer file'))
+  return el('div', { class: 'row' },
+    el('button', { onclick: async e => copy(linkTo('transfer', b64url(await gzip(bytes))), e.target) }, 'Copy a link to it'),
+    el('button', { class: 'quiet', onclick: () => download(bytes, name) }, 'Download the file'))
 }
 
 async function copy (text, button) {
@@ -85,7 +96,28 @@ function start () {
   $('#main').hidden = false
   $('#address').textContent = v012.deriveAddress(w.descriptor, '&0/0').address
   $('#api').textContent = chain.apiBase()
-  refresh()
+  refresh().then(openLink)
+}
+
+async function openLink () {
+  const q = new URLSearchParams(location.search)
+  const h = new URLSearchParams(location.hash.slice(1))
+  const pay = q.get('pay') ?? h.get('pay')
+  const transfer = q.get('transfer') ?? h.get('transfer')
+  if (!pay && !transfer) return
+  // Forget the link once read, keeping ?wallet, so a reload doesn't repeat it.
+  const keep = new URLSearchParams()
+  if (q.get('wallet')) keep.set('wallet', q.get('wallet'))
+  history.replaceState(null, '', location.pathname + (keep.size ? `?${keep}` : ''))
+  if (pay) {
+    $('#p-invoice').value = pay
+    $('#pay-card').scrollIntoView({ block: 'start' })
+    $('#pay-out').replaceChildren(note('', 'Opened from a pay link. Check the invoice, then build the payment.'))
+  }
+  if (transfer) {
+    $('#receive-card').scrollIntoView({ block: 'start' })
+    await guard('#accept-out', async () => takeIn(await gunzip(fromB64url(transfer))))()
+  }
 }
 
 $('#create').addEventListener('click', () => {
@@ -224,6 +256,7 @@ function renderOpenInvoices () {
     return el('div', { class: 'row small' },
       el('span', {}, `${amount(h, s.value)} to coin ${short(s.outpoint)}`),
       el('button', { class: 'quiet', onclick: e => copy(s.invoice, e.target) }, 'Copy'),
+      el('button', { class: 'quiet', onclick: e => copy(linkTo('pay', encodeURIComponent(s.invoice)), e.target) }, 'Pay link'),
       el('button', { class: 'quiet', onclick: () => { s.cancelled = true; persist(); render() } }, 'Cancel'))
   }))
 }
@@ -362,7 +395,8 @@ $('#invoice').addEventListener('click', guard('#invoice-out', () => {
   state.seals.push({ contractId: id, outpoint: coin.outpoint, nonce, invoice: inv.invoice, value, at: new Date().toISOString() })
   if (!state.contracts[id]) state.contracts[id] = { files: [] }
   persist()
-  const button = el('button', { class: 'quiet', onclick: e => copy(inv.invoice, e.target) }, 'Copy invoice')
+  const button = el('span', {}, el('button', { class: 'quiet', onclick: e => copy(inv.invoice, e.target) }, 'Copy invoice'), ' ',
+    el('button', { class: 'quiet', onclick: e => copy(linkTo('pay', encodeURIComponent(inv.invoice)), e.target) }, 'Copy a pay link'))
   $('#invoice-out').replaceChildren(note('ok', el('div', { class: 'mono' }, inv.invoice), el('div', { class: 'row' }, button),
     el('p', { class: 'small' }, `Paid to coin ${short(coin.outpoint)}. When the payer sends you the transfer file, take it in below.`)))
 }))
@@ -372,6 +406,10 @@ $('#accept-file').addEventListener('change', guard('#accept-out', async e => {
   if (!file) return
   const bytes = new Uint8Array(await file.arrayBuffer())
   e.target.value = ''
+  takeIn(bytes)
+}))
+
+function takeIn (bytes) {
   const r = rgbjs.validateConsignment(bytes)
   if (!r.valid) throw new Error(`This file isn't valid: ${r.error}`)
   if (r.line !== 'v0.12') throw new Error('Bunting holds RGB v0.12 assets only.')
@@ -395,7 +433,7 @@ $('#accept-file').addEventListener('change', guard('#accept-out', async e => {
       r.issuer?.trusted ? 'Its issuer is a standard one rgbjs trusts. ' : 'Careful: its issuer isn\'t one rgbjs trusts, so what its state means is the sender\'s word. ',
       'It is yours once that transaction is mined: see Assets.')
     : note('warn', 'Taken in, but nothing in it is paid to your invoices.'))
-}))
+}
 
 // ---- pay -----------------------------------------------------------------
 
