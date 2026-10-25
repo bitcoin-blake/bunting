@@ -265,30 +265,34 @@ $('#guide-hide').addEventListener('click', () => { state.guideHidden = true; per
 async function checkWitnesses () {
   let tipHeight
   try { tipHeight = await chain.tip() } catch { return }
-  const signed = signedTip().catch(() => null)
+  const signed = await signedTip().catch(() => null)
   for (const [id, h] of holdings) {
     const cell = document.getElementById(`w-${id.replace(/[^A-Za-z0-9]/g, '')}`)
     if (!cell || !h.witnesses.length) continue
     try {
-      const r = await Promise.all(h.witnesses.map(txid => verifyMined(txid, tipHeight)))
+      const r = await Promise.all(h.witnesses.map(txid => verifyMined(txid, tipHeight, signed)))
       const waiting = r.filter(x => x.state !== 'verified')
       const min = Math.min(...r.map(x => x.confirmations))
       const more = r.some(x => x.confirmations === min && x.more)
+      const anchored = r.every(x => x.anchored === true)
+      const off = r.some(x => x.anchored === false)
       cell.textContent = waiting.length
         ? `${waiting.length} of ${r.length} witness transaction${r.length === 1 ? '' : 's'} not mined yet`
-        : `every witness mined, ${min}${more ? '+' : ''} confirmation${min === 1 && !more ? '' : 's'}, checked here`
-      cell.title = 'Merkle proofs, header proof of work and header links checked in this tab; the explorer only supplied the data.'
+        : off
+          ? 'mined on a chain that does NOT lead to the tip signed on Nostr'
+          : `every witness mined, ${min}${more ? '+' : ''} confirmation${min === 1 && !more ? '' : 's'}, checked here${anchored ? ' and part of the chain signed on Nostr' : ''}`
+      if (off) cell.style.color = 'var(--bad)'
+      cell.title = 'Merkle proofs, header proof of work, difficulty and links checked in this tab' + (anchored ? `, up to the tip signed on Nostr at block ${signed.height}` : '') + '; the explorer only supplied the data.'
     } catch (e) {
       cell.textContent = `the explorer's answer failed a check: ${e.message}`
       cell.style.color = 'var(--bad)'
     }
   }
-  const s = await signed
-  const agree = await agreesWithSignedTip(s)
-  if (s && agree !== null) {
+  const agree = await agreesWithSignedTip(signed)
+  if (signed && agree !== null) {
     $('#chain').append(agree
-      ? ` · matches the tip signed on Nostr at block ${s.height.toLocaleString()}`
-      : el('span', { style: 'color: var(--bad)' }, ` · disagrees with the tip signed on Nostr at block ${s.height.toLocaleString()}`))
+      ? ` · matches the tip signed on Nostr at block ${signed.height.toLocaleString()}`
+      : el('span', { style: 'color: var(--bad)' }, ` · disagrees with the tip signed on Nostr at block ${signed.height.toLocaleString()}`))
   }
 }
 

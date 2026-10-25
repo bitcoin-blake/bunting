@@ -3,7 +3,7 @@ import { bytesToHex, hexToBytes } from './lib/bytes.js'
 import { schnorr } from './lib/deps.js'
 import { tweak, wallet } from './lib/keys.js'
 import { parentTxEvent } from './lib/nostr.js'
-import { blockHash, merkleRoot, parseHeader, powOk, target } from './lib/spv.js'
+import { blockHash, expectedBits, merkleRoot, parseHeader, powOk, target } from './lib/spv.js'
 import { addressScript } from './lib/address.js'
 import { buildTx, vsizeOf } from './lib/tx.js'
 import { outpointOf, parseTx, serializeTx, signTx, taprootSighash, txid } from './lib/tx.js'
@@ -161,6 +161,18 @@ await test('a merkle proof leads from the txid to the header\'s merkle root', ()
   eq(merkleRoot(txid, merkle, 2), parseHeader(H153567).merkleRoot, 'root')
   if (merkleRoot(txid, merkle, 3) === parseHeader(H153567).merkleRoot) throw new Error('a wrong position still matched')
   if (merkleRoot('00'.repeat(32), merkle, 2) === parseHeader(H153567).merkleRoot) throw new Error('another txid still matched')
+})
+
+await test('difficulty: blake\'s real retarget at 153,216 and the 20-minute exception', () => {
+  // Period 151,200–153,215: first block bits 0x19050947 at 1789654675, last block at 1792486248.
+  eq(expectedBits(153216, { time: 1792502028 }, { time: 1792486248, bits: 0x1d00ffff }, { time: 1789654675, bits: 0x19050947 }), 0x190bca17, 'retarget')
+  const prev = parseHeader(H153566)
+  const cur = parseHeader(H153567)
+  const period = { bits: 0x190bca17, time: 1792502028 }
+  if (!(cur.time > prev.time + 1200)) throw new Error('expected a gap of more than 20 minutes')
+  eq(expectedBits(153567, cur, prev, period), 0x1d00ffff, 'more than 20 minutes after the last block: minimum difficulty allowed')
+  eq(cur.bits, 0x1d00ffff, 'and that is what block 153,567 carries')
+  eq(expectedBits(153567, { time: prev.time + 600 }, prev, period), 0x190bca17, 'ten minutes after: the period\'s difficulty is required')
 })
 
 const failed = results.filter(r => !r).length
