@@ -210,6 +210,14 @@ await test('a wallet backup decrypts with its passphrase, and only with it', asy
   if (!threw) throw new Error('accepted a short passphrase')
 })
 
+await test('base64 handles megabytes (contract histories and backups grow)', async () => {
+  const { toBase64, fromBase64 } = await import('./lib/bytes.js')
+  const big = new Uint8Array(3 * 1024 * 1024).map((_, i) => i * 7)
+  const back = fromBase64(toBase64(big))
+  eq(back.length, big.length, 'length')
+  eq(back.every((x, i) => x === big[i]), true, 'bytes')
+})
+
 const failed = results.filter(r => !r).length
 document.getElementById('summary').textContent = failed ? `${failed} of ${results.length} failed` : `All ${results.length} passed`
 document.title = failed ? 'Bunting tests: FAIL' : 'Bunting tests: pass'
