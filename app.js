@@ -4,6 +4,7 @@ import * as rgbjs from 'https://rgbjs.com/src/index.js'
 import { fromBase64, hexToBytes, bytesToHex, toBase64 } from './lib/bytes.js'
 import * as chain from './lib/esplora.js'
 import { wallet } from './lib/keys.js'
+import { parentTxEvent, publish } from './lib/nostr.js'
 import { load, save, wipe } from './lib/store.js'
 import { outpointOf, parseTx, signTx } from './lib/tx.js'
 
@@ -312,7 +313,7 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   $('#pay-out').replaceChildren(
     note('', el('div', {}, `Pays ${amount(h, inv.amount)} for a fee of ${fee} sats. `, `Spends ${spent.length} coin${spent.length === 1 ? '' : 's'}; ${out.length} outputs, the first commits to the RGB transfer.`),
       el('div', { class: 'mono small' }, `witness ${p.txid}`)),
-    note('warn', 'Signing broadcasts the transaction to the BLAKE2b chain through ', chain.apiBase(), '. It can\'t be taken back.',
+    note('warn', 'Signing broadcasts the transaction to the BLAKE2b chain, through ', chain.apiBase(), ' and Nostr relays. It can\'t be taken back.',
       el('div', { class: 'row' }, el('button', { id: 'sign', onclick: guard('#pay-out', signAndSend) }, 'Sign and broadcast'), el('button', { class: 'quiet', onclick: () => { pending = null; $('#pay-out').replaceChildren() } }, 'Cancel')))
   )
 }))
@@ -329,15 +330,22 @@ async function signAndSend () {
     keys[op] = { sats: c.sats, script: c.script, key: w.signingKey(c.terminal) }
   }
   const signed = signTx(p.tx, keys)
-  const txid = await chain.broadcast(signed)
-  if (txid !== p.txid) throw new Error(`the server reported txid ${txid}, expected ${p.txid}`)
+  // Two routes, as some nodes' policies refuse what others accept: the
+  // explorer's node, and Nostr relays where a txbt4 node picks it up (Reef's way).
+  const [direct, relayed] = await Promise.all([
+    chain.broadcast(signed).then(id => ({ ok: id === p.txid, text: id }), e => ({ ok: false, text: e.message })),
+    publish(parentTxEvent(signed))
+  ])
+  const relayedOk = Object.values(relayed).filter(r => r === 'ok').length
+  if (!direct.ok && !relayedOk) throw new Error(`Nothing took the transaction. Explorer: ${direct.text}. Relays: ${JSON.stringify(relayed)}`)
+  const txid = p.txid
   // Keep the payer's copy, which holds the change, alongside the earlier files.
   state.contracts[id].files.push(toBase64(p.backup))
   state.sent.push({ txid, contractId: id, invoice, transfer: toBase64(p.transfer), at: new Date().toISOString() })
   persist()
   const ticker = holdings.get(id)?.summary?.ticker ?? 'rgb'
   const name = `bunting-${ticker}-${txid.slice(0, 8)}.transfer.rgb`
-  $('#pay-out').replaceChildren(note('ok', 'Broadcast: ', link(`/tx/${txid}`, short(txid)), '. Now give the payee the transfer file; they need it to see the payment.',
+  $('#pay-out').replaceChildren(note('ok', 'Sent: ', link(`/tx/${txid}`, short(txid)), direct.ok ? ' (the explorer has it)' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it, so it shows there once mined)`, '. Now give the payee the transfer file; they need it to see the payment.',
     el('div', { class: 'row' }, el('button', { onclick: () => download(p.transfer, name) }, 'Download the transfer file'))))
   download(p.transfer, name)
   setTimeout(refresh, 3000)

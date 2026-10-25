@@ -2,6 +2,7 @@
 import { bytesToHex, hexToBytes } from './lib/bytes.js'
 import { schnorr } from './lib/deps.js'
 import { tweak, wallet } from './lib/keys.js'
+import { parentTxEvent } from './lib/nostr.js'
 import { outpointOf, parseTx, serializeTx, signTx, taprootSighash, txid } from './lib/tx.js'
 
 const out = document.getElementById('out')
@@ -80,6 +81,14 @@ await test('signTx refuses a key that does not match the coin', () => {
   const op = outpointOf(parseTx(hex).ins[0])
   try { signTx(hex, { [op]: { sats: 1000, script: scriptPubkey, key: w.signingKey('&0/1') } }) } catch (e) { if (/doesn't match/.test(e.message)) return; throw e }
   throw new Error('signed anyway')
+})
+
+await test('the Nostr payment event is kind 23503, tagged for tally, and its signature verifies', async () => {
+  const ev = parentTxEvent('0200')
+  eq(ev.kind, 23503, 'kind'); eq(ev.content, '0200', 'content'); eq(JSON.stringify(ev.tags), '[["chain","sidestr:tally"]]', 'tags')
+  const { sha256 } = await import('./lib/deps.js')
+  eq(bytesToHex(sha256(new TextEncoder().encode(JSON.stringify([0, ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content])))), ev.id, 'id')
+  if (!schnorr.verify(hexToBytes(ev.sig), hexToBytes(ev.id), hexToBytes(ev.pubkey))) throw new Error('signature does not verify')
 })
 
 const failed = results.filter(r => !r).length
