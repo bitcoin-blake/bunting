@@ -316,10 +316,12 @@ function renderGuide () {
 }
 $('#guide-hide').addEventListener('click', () => { state.guideHidden = true; persist(); $('#guide').hidden = true })
 
-async function checkWitnesses () {
+async function checkWitnesses (retry = true) {
   let tipHeight
   try { tipHeight = await chain.tip() } catch { return }
   const signed = await signedTip().catch(() => null)
+  // Relays come and go: with no fresh signed tip, ask once more a little later.
+  if (retry && (!signed || signed.stale)) setTimeout(() => checkWitnesses(false).then(() => {}), 20000)
   for (const [id, h] of holdings) {
     const cell = document.getElementById(`w-${id.replace(/[^A-Za-z0-9]/g, '')}`)
     if (!cell || !h.witnesses.length) continue
@@ -343,14 +345,12 @@ async function checkWitnesses () {
     }
   }
   const agree = await agreesWithSignedTip(signed)
+  $('#chain').querySelector('.signed')?.remove()
   const age = s => { const h = Math.round((Date.now() / 1000 - s.created_at) / 3600); return h < 48 ? `${h} hours` : `${Math.round(h / 24)} days` }
-  if (!signed) $('#chain').append(' · no signed tip from Nostr reached')
-  else if (signed.stale) $('#chain').append(` · the newest signed tip reached on Nostr is ${age(signed)} old (block ${signed.height.toLocaleString()}), so confirmations rest on the header checks alone`)
-  else if (agree !== null) {
-    $('#chain').append(agree
-      ? ` · signed tip ${signed.height.toLocaleString()} on Nostr, matching`
-      : el('span', { style: 'color: var(--bad)' }, ` · disagrees with the tip signed on Nostr at block ${signed.height.toLocaleString()}`))
-  }
+  const say = (text, bad) => $('#chain').append(el('span', { class: 'signed', style: bad ? 'color: var(--bad)' : null }, text))
+  if (!signed) say(' · no signed tip from Nostr reached')
+  else if (signed.stale) say(` · the newest signed tip reached on Nostr is ${age(signed)} old (block ${signed.height.toLocaleString()}), so confirmations rest on the header checks alone`)
+  else if (agree !== null) say(agree ? ` · signed tip ${signed.height.toLocaleString()} on Nostr, matching` : ` · disagrees with the tip signed on Nostr at block ${signed.height.toLocaleString()}`, !agree)
 }
 
 // ---- issue ---------------------------------------------------------------
