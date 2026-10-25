@@ -202,11 +202,46 @@ function render () {
     ...ids.map(id => el('option', { value: id }, holdings.get(id)?.summary ? unit(holdings.get(id)) : short(id))),
     el('option', { value: '' }, 'Another asset: paste its contract ID')
   )
+  renderGuide()
 }
 
 // Confirmations are checked in this tab: merkle proof, header proof of work,
 // header links up to the tip (lib/spv.js), and the tip against the one the
 // publisher signs on Nostr. The explorer supplies the data, not the verdict.
+// ---- getting started ----------------------------------------------------
+
+function go (card, focus) {
+  const c = $(card)
+  c.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (card === '#assets-card') c.querySelector('details').open = true
+  if (focus) setTimeout(() => $(focus)?.focus(), 400)
+}
+
+function renderGuide () {
+  const received = [...holdings.values()].some(h => h.cells.length) && state.seals.length
+  const steps = [
+    [coins.length > 0, 'Get test coins',
+      ['Send txbt4 to this wallet\'s address, ', el('a', { href: 'https://bitcoin-blake.github.io/winch/', target: '_blank', rel: 'noopener' }, 'mine some in Winch'), ', or ask someone with a txbt4 node.'],
+      ['Copy the address', () => { copy($('#address').textContent, $('#copy-address')); go('#coins-card') }]],
+    [Object.values(state.contracts).some(c => c.files.length), 'Issue an asset',
+      ['A token or an RGB25 asset on one of your coins. Issuing costs nothing on chain.'],
+      ['Issue', () => go('#assets-card', '#i-name')]],
+    [state.seals.length > 0, 'Make an invoice',
+      ['Ask for an asset, yours or someone else\'s: the payment lands on one of your coins.'],
+      ['Make one', () => go('#receive-card', '#r-amount')]],
+    [state.sent.length > 0 || received, 'Send or take in a payment',
+      ['Pay an invoice (yours, from a second wallet with ', el('code', {}, '?wallet=bob'), ', or a friend\'s), then hand over the transfer file.'],
+      ['Pay', () => go('#pay-card', '#p-invoice')]]
+  ]
+  const done = steps.filter(s => s[0]).length
+  $('#guide').hidden = state.guideHidden || done === steps.length
+  $('#guide-steps').replaceChildren(...steps.map(([ok, title, text, [label, act]], i) => el('li', { class: ok ? 'done' : '' },
+    el('span', { class: 'mark', 'aria-label': ok ? 'done' : 'to do' }, ok ? '✓' : String(i + 1)),
+    el('span', { class: 'what' }, el('b', {}, title), ...text),
+    ok ? el('span') : el('button', { class: 'quiet', onclick: act }, label))))
+}
+$('#guide-hide').addEventListener('click', () => { state.guideHidden = true; persist(); $('#guide').hidden = true })
+
 async function checkWitnesses () {
   let tipHeight
   try { tipHeight = await chain.tip() } catch { return }

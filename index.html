@@ -43,6 +43,12 @@
   .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; border-left: 4px solid var(--accent); background: var(--bg) } .msg.ok { border-color: var(--ok) } .msg.warn { border-color: var(--warn) } .msg.bad { border-color: var(--bad) }
   .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
   [hidden] { display: none !important }
+  .steps { margin: 8px 0 0; padding-left: 0; list-style: none; display: grid; gap: 10px }
+  .steps li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start }
+  .steps .mark { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--muted) }
+  .steps .done .mark { background: var(--ok); border-color: var(--ok); color: #fff }
+  .steps .done .what { color: var(--muted) }
+  .steps .what b { display: block }
 </style>
 <div class="wrap">
   <div class="flags" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -59,7 +65,14 @@
   </section>
 
   <div id="main" hidden>
-    <section class="card">
+    <section class="card" id="guide" hidden>
+      <h2>Getting started</h2>
+      <p class="small">Four steps to a first RGB payment on the BLAKE2b testnet4. Each ticks itself off.</p>
+      <ol class="steps" id="guide-steps"></ol>
+      <div class="row"><button class="quiet" id="guide-hide">Hide this</button></div>
+    </section>
+
+    <section class="card" id="coins-card">
       <h2>Coins</h2>
       <p class="small">Send txbt4 to this address. Each coin can carry one RGB asset.</p>
       <p class="mono" id="address"></p>
@@ -67,7 +80,7 @@
       <div class="scroll"><table id="coins"></table></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="assets-card">
       <h2>Assets</h2>
       <div class="scroll"><table id="assets"></table></div>
       <details style="margin-top:12px"><summary>Issue a new token</summary>
@@ -89,7 +102,7 @@
       </details>
     </section>
 
-    <section class="card">
+    <section class="card" id="receive-card">
       <h2>Receive</h2>
       <div class="row">
         <label>Asset<select id="r-asset"></select></label>
@@ -101,7 +114,7 @@
       <div id="accept-out"></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="pay-card">
       <h2>Pay</h2>
       <label>Invoice<textarea id="p-invoice" placeholder="contract:tb@…"></textarea></label>
       <div class="row"><label>Fee rate (sat/vB)<input id="p-rate" value="1" inputmode="decimal"></label><button id="build">Build the payment</button></div>
