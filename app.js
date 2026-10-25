@@ -61,6 +61,11 @@ function download (bytes, name) {
   setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
+/** The ways to hand a transfer file to its payee. */
+function handOver (bytes, name) {
+  return el('div', { class: 'row' }, el('button', { onclick: () => download(bytes, name) }, 'Download the transfer file'))
+}
+
 async function copy (text, button) {
   try { await navigator.clipboard.writeText(text); button.textContent = 'Copied' } catch { button.textContent = 'Select and copy it' }
 }
@@ -142,7 +147,7 @@ function computeHoldings () {
 
 // A coin an invoice of yours points at, with nothing received on it yet: a
 // payment may still land there, so plain sends leave it alone.
-const awaited = outpoint => state.seals.some(s => s.outpoint === outpoint) && !assetsOn(outpoint).length
+const awaited = outpoint => state.seals.some(s => s.outpoint === outpoint && !s.cancelled) && !assetsOn(outpoint).length
 const plainCoins = () => coins.filter(c => !assetsOn(c.outpoint).length && !awaited(c.outpoint))
 const assetsOn = outpoint => [...holdings].filter(([, h]) => h.cells.some(c => c.outpoint === outpoint)).map(([id]) => id)
 const total = h => h.cells.reduce((n, c) => /^\d+$/.test(c.value) ? n + BigInt(c.value) : n, 0n)
@@ -197,17 +202,32 @@ function render () {
   $('#issue').disabled = !free.length
   $('#sent').replaceChildren(...(state.sent.length ? [el('h3', { class: 'small' }, 'Payments made'), ...state.sent.slice().reverse().map(s => el('div', { class: 'row small' },
     el('span', { class: 'mono' }, link(`/tx/${s.txid}`, short(s.txid))), el('span', {}, s.at.slice(0, 16).replace('T', ' ')),
-    el('button', { class: 'quiet', onclick: () => download(fromBase64(s.transfer), `bunting-${s.txid.slice(0, 8)}.transfer.rgb`) }, 'Transfer file')))] : []))
+    state.seals.some(x => x.invoice === s.invoice) ? el('span', {}, 'to this wallet') : handOver(fromBase64(s.transfer), `bunting-${s.txid.slice(0, 8)}.transfer.rgb`)))] : []))
   $('#r-asset').replaceChildren(
     ...ids.map(id => el('option', { value: id }, holdings.get(id)?.summary ? unit(holdings.get(id)) : short(id))),
     el('option', { value: '' }, 'Another asset: paste its contract ID')
   )
   renderGuide()
+  renderOpenInvoices()
 }
 
 // Confirmations are checked in this tab: merkle proof, header proof of work,
 // header links up to the tip (lib/spv.js), and the tip against the one the
 // publisher signs on Nostr. The explorer supplies the data, not the verdict.
+// Invoices waiting on a coin that has nothing yet. Cancelling one frees the
+// coin for plain sends; its secret stays, so a late payment is still seen.
+function renderOpenInvoices () {
+  const mine = new Set(coins.map(c => c.outpoint))
+  const open = state.seals.filter(s => !s.cancelled && mine.has(s.outpoint) && !assetsOn(s.outpoint).length)
+  $('#open-invoices').replaceChildren(...(open.length ? [el('h3', { class: 'small' }, 'Open invoices')] : []), ...open.map(s => {
+    const h = holdings.get(s.contractId)
+    return el('div', { class: 'row small' },
+      el('span', {}, `${amount(h, s.value)} to coin ${short(s.outpoint)}`),
+      el('button', { class: 'quiet', onclick: e => copy(s.invoice, e.target) }, 'Copy'),
+      el('button', { class: 'quiet', onclick: () => { s.cancelled = true; persist(); render() } }, 'Cancel'))
+  }))
+}
+
 // ---- getting started ----------------------------------------------------
 
 function go (card, focus) {
@@ -449,9 +469,11 @@ async function signAndSend () {
   persist()
   const ticker = (holdings.get(id)?.summary ? unit(holdings.get(id)) : 'rgb').replace(/[^A-Za-z0-9]+/g, '-')
   const name = `bunting-${ticker}-${txid.slice(0, 8)}.transfer.rgb`
-  $('#pay-out').replaceChildren(note('ok', 'Sent: ', link(`/tx/${txid}`, short(txid)), direct.ok ? ' (the explorer has it)' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it, so it shows there once mined)`, '. Now give the payee the transfer file; they need it to see the payment.',
-    el('div', { class: 'row' }, el('button', { onclick: () => download(p.transfer, name) }, 'Download the transfer file'))))
-  download(p.transfer, name)
+  const sent = note('ok', 'Sent: ', link(`/tx/${txid}`, short(txid)), direct.ok ? ' (the explorer has it)' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it, so it shows there once mined)`, '. ')
+  // An invoice this wallet made: the payment is already ours, nothing to hand over.
+  if (state.seals.some(s => s.invoice === invoice)) sent.append('It pays one of this wallet\'s own invoices, so there is nothing to hand over.')
+  else sent.append('Now give the payee the transfer file; they need it to see the payment.', handOver(p.transfer, name))
+  $('#pay-out').replaceChildren(sent)
   setTimeout(refresh, 3000)
 }
 
