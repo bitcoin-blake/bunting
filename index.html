@@ -48,6 +48,7 @@
   <div class="flags" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <h1>Bunting</h1>
   <p class="lede">RGB assets on the Bitcoin BLAKE2b chain (txbt4), in this tab. Test coins only.</p>
+  <p class="small" id="wallet-name" hidden></p>
   <p class="small" id="chain">Connecting to the chain…</p>
 
   <section class="card" id="setup" hidden>
@@ -130,7 +131,7 @@
 
     <section class="card">
       <h2>This wallet</h2>
-      <p class="small">Explorer: <span id="api"></span>. Add <code>?api=&lt;Esplora URL&gt;</code> to use another.</p>
+      <p class="small">Explorer: <span id="api"></span>. Add <code>?api=&lt;Esplora URL&gt;</code> to use another, or <code>?wallet=&lt;name&gt;</code> for a separate wallet in this browser.</p>
       <div class="row"><button class="quiet" id="show-seed">Show the seed</button><button class="quiet" id="wipe">Remove this wallet from the tab</button></div>
       <p class="mono" id="seed" hidden></p>
       <div id="wipe-confirm" hidden class="msg bad">This deletes the seed and every asset file from this tab. Without a backup of the seed, the coins and assets are gone. <div class="row"><button id="wipe-yes">Delete it</button><button class="quiet" id="wipe-no">Keep it</button></div></div>

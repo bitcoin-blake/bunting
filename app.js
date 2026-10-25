@@ -6,7 +6,7 @@ import { sha256 } from './lib/deps.js'
 import * as chain from './lib/esplora.js'
 import { wallet } from './lib/keys.js'
 import { parentTxEvent, publish } from './lib/nostr.js'
-import { load, save, wipe } from './lib/store.js'
+import { WALLET, load, save, wipe } from './lib/store.js'
 import { addressScript } from './lib/address.js'
 import { buildTx, outpointOf, parseTx, signTx, txid as txidOf, vsizeOf } from './lib/tx.js'
 
@@ -65,6 +65,12 @@ async function copy (text, button) {
 }
 
 // ---- setup -------------------------------------------------------------
+
+if (WALLET) {
+  $('#wallet-name').hidden = false
+  $('#wallet-name').replaceChildren(`Wallet “${WALLET}” · `, el('a', { href: location.pathname }, 'the main wallet'))
+  document.title = `Bunting · ${WALLET}`
+}
 
 function start () {
   if (!state.seed) { $('#setup').hidden = false; return }
