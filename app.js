@@ -13,7 +13,11 @@ const { v012 } = rgbjs
 const $ = s => document.querySelector(s)
 // Receive keychain &0 and change keychain &1; rgbjs puts payment change on &1/0.
 const TERMINALS = ['&0/0', '&0/1', '&0/2', '&0/3', '&0/4', '&1/0', '&1/1', '&1/2']
-const FNA = { codexId: '7C15w3W1-L0T~zXw-Aeh5~kV-Zquz729-HXQFKQW-_5lX9O8', version: 0, checksum: 'AYkSrg' }
+// The trusted issuers rgbjs knows: RGB20 fungible tokens and RGB25 assets.
+const ISSUERS = {
+  FNA: { codexId: '7C15w3W1-L0T~zXw-Aeh5~kV-Zquz729-HXQFKQW-_5lX9O8', version: 0, checksum: 'AYkSrg' },
+  UFA: { codexId: 'mqmGvodN-WxpxyRb-RsGHiTQ-jDoRvMy-ClhrQGx-FMa5Cpw', version: 0, checksum: 'aiRB3w' }
+}
 const PRECISION = { 0: 'indivisible', 2: 'centi', 8: 'centiMicro' }
 const MIN_SATS = 1000 // a coin carrying an asset also pays the fee of spending it
 
@@ -126,7 +130,8 @@ function computeHoldings () {
 
 const assetsOn = outpoint => [...holdings].filter(([, h]) => h.cells.some(c => c.outpoint === outpoint)).map(([id]) => id)
 const total = h => h.cells.reduce((n, c) => /^\d+$/.test(c.value) ? n + BigInt(c.value) : n, 0n)
-const amount = (h, raw) => h?.summary ? `${rgbjs.formatAmount(String(raw), h.summary.decimals)} ${h.summary.ticker ?? ''}`.trim() : String(raw)
+const unit = h => h?.summary?.ticker ?? h?.summary?.name ?? 'units'
+const amount = (h, raw) => h?.summary ? `${rgbjs.formatAmount(String(raw), h.summary.decimals)} ${unit(h)}` : String(raw)
 
 async function refresh () {
   $('#refresh').disabled = true
@@ -162,7 +167,7 @@ function render () {
     ...ids.map(id => {
       const h = holdings.get(id)
       return el('tr', {},
-        el('td', {}, el('div', {}, h?.summary ? `${h.summary.name ?? ''} (${h.summary.ticker ?? '?'})` : 'Unknown asset'), el('div', { class: 'mono small' }, id)),
+        el('td', {}, el('div', {}, h?.summary ? `${h.summary.name ?? ''} (${h.summary.ticker ?? 'RGB25'})` : 'Unknown asset'), el('div', { class: 'mono small' }, id)),
         el('td', {}, amount(h, total(h ?? { cells: [] }))),
         el('td', { id: `w-${id.replace(/[^A-Za-z0-9]/g, '')}`, class: 'small' }, h?.witnesses.length ? 'checking…' : 'issued here, no transfers yet'))
     }),
@@ -175,7 +180,7 @@ function render () {
     el('span', { class: 'mono' }, link(`/tx/${s.txid}`, short(s.txid))), el('span', {}, s.at.slice(0, 16).replace('T', ' ')),
     el('button', { class: 'quiet', onclick: () => download(fromBase64(s.transfer), `bunting-${s.txid.slice(0, 8)}.transfer.rgb`) }, 'Transfer file')))] : []))
   $('#r-asset').replaceChildren(
-    ...ids.map(id => el('option', { value: id }, holdings.get(id)?.summary?.ticker ?? short(id))),
+    ...ids.map(id => el('option', { value: id }, holdings.get(id)?.summary ? unit(holdings.get(id)) : short(id))),
     el('option', { value: '' }, 'Another asset: paste its contract ID')
   )
 }
@@ -198,20 +203,23 @@ async function checkWitnesses () {
 // ---- issue ---------------------------------------------------------------
 
 $('#issue').addEventListener('click', guard('#issue-out', () => {
+  const kind = $('#i-kind').value
   const ticker = $('#i-ticker').value.trim().toUpperCase()
   const name = $('#i-name').value.trim()
   const decimals = Number($('#i-precision').value)
   const whole = $('#i-supply').value.trim()
   const outpoint = $('#i-coin').value
-  if (!/^[A-Z][A-Z0-9]{0,7}$/.test(ticker)) throw new Error('The ticker is 1 to 8 letters or digits, starting with a letter.')
+  if (kind === 'FNA' && !/^[A-Z][A-Z0-9]{0,7}$/.test(ticker)) throw new Error('The ticker is 1 to 8 letters or digits, starting with a letter.')
   if (!name) throw new Error('Give the token a name.')
   if (!/^[1-9]\d*$/.test(whole)) throw new Error('The supply is a whole number of tokens.')
   const supply = Number(whole) * 10 ** decimals
   if (!Number.isSafeInteger(supply)) throw new Error('That supply is too large here.')
   const params = {
-    consensus: 'bitcoin', testnet: true, method: 'issue', timestamp: new Date().toISOString(), issuer: FNA,
+    consensus: 'bitcoin', testnet: true, method: 'issue', timestamp: new Date().toISOString(), issuer: ISSUERS[kind],
     name: (name.replace(/[^A-Za-z0-9_]/g, '') || 'Token').replace(/^(\d)/, 'T$1'),
-    global: [{ name: 'ticker', verified: ticker }, { name: 'name', verified: name }, { name: 'precision', verified: PRECISION[decimals] }, { name: 'issued', verified: supply }],
+    global: [
+      kind === 'FNA' ? { name: 'ticker', verified: ticker } : { name: 'details', verified: null, unverified: $('#i-details').value.trim() || 'none' },
+      { name: 'name', verified: name }, { name: 'precision', verified: PRECISION[decimals] }, { name: 'issued', verified: supply }],
     owned: [{ name: 'balance', seal: outpoint, data: supply }]
   }
   const bytes = v012.issueContract(params, w.noiseSeed)
@@ -220,8 +228,15 @@ $('#issue').addEventListener('click', guard('#issue-out', () => {
   state.contracts[r.contractId] = { files: [toBase64(bytes)] }
   persist()
   computeHoldings(); render()
-  $('#issue-out').replaceChildren(note('ok', `Issued ${whole} ${ticker} on coin ${short(outpoint)}. `, el('span', { class: 'mono' }, r.contractId)))
+  $('#issue-out').replaceChildren(note('ok', `Issued ${whole} ${kind === 'FNA' ? ticker : name} on coin ${short(outpoint)}. `, el('span', { class: 'mono' }, r.contractId)))
 }))
+
+$('#i-kind').addEventListener('change', () => {
+  const ufa = $('#i-kind').value === 'UFA'
+  $('#i-ticker-wrap').hidden = ufa
+  $('#i-details-wrap').hidden = !ufa
+  if (ufa && $('#i-name').value === 'Bunting Flags') $('#i-name').value = 'Club Shares'
+})
 
 // ---- receive -------------------------------------------------------------
 
@@ -354,7 +369,7 @@ async function signAndSend () {
   if (p.tapret) (state.tapret ??= {})[p.tapret.scriptPubkey] = { terminal: p.change.terminal, merkleRoot: p.tapret.merkleRoot }
   state.sent.push({ txid, contractId: id, invoice, transfer: toBase64(p.transfer), at: new Date().toISOString() })
   persist()
-  const ticker = holdings.get(id)?.summary?.ticker ?? 'rgb'
+  const ticker = (holdings.get(id)?.summary ? unit(holdings.get(id)) : 'rgb').replace(/[^A-Za-z0-9]+/g, '-')
   const name = `bunting-${ticker}-${txid.slice(0, 8)}.transfer.rgb`
   $('#pay-out').replaceChildren(note('ok', 'Sent: ', link(`/tx/${txid}`, short(txid)), direct.ok ? ' (the explorer has it)' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it, so it shows there once mined)`, '. Now give the payee the transfer file; they need it to see the payment.',
     el('div', { class: 'row' }, el('button', { onclick: () => download(p.transfer, name) }, 'Download the transfer file'))))

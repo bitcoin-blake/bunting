@@ -71,9 +71,13 @@
       <div class="scroll"><table id="assets"></table></div>
       <details style="margin-top:12px"><summary>Issue a new token</summary>
         <div class="row">
-          <label>Ticker<input id="i-ticker" value="FLAG" maxlength="8"></label>
+          <label>Kind<select id="i-kind"><option value="FNA">RGB20 token: a ticker, fixed supply</option><option value="UFA">RGB25 asset: no ticker, with terms</option></select></label>
+        </div>
+        <div class="row">
+          <label id="i-ticker-wrap">Ticker<input id="i-ticker" value="FLAG" maxlength="8"></label>
           <label>Name<input id="i-name" value="Bunting Flags" maxlength="40"></label>
         </div>
+        <div class="row" id="i-details-wrap" hidden><label>Terms or description (shown to holders, not verified)<input id="i-details" value="Club shares, one vote each." maxlength="200"></label></div>
         <div class="row">
           <label>Supply<input id="i-supply" value="1000" inputmode="numeric"></label>
           <label>Decimal places<select id="i-precision"><option value="0">0</option><option value="2">2</option><option value="8">8</option></select></label>

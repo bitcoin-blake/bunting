@@ -77,6 +77,24 @@ await test('issue, invoice, pay, sign: the signed transaction is the witness the
   eq(rgbjs.v012.receive(p.transfer, { outpoint: `${'44'.repeat(32)}:0`, noiseSeed: payee, nonce: 0 }).receive.received[0].value, '25', 'payee receives')
 })
 
+await test('an RGB25 asset (no ticker) issues, pays with tapret and signs', () => {
+  const { scriptPubkey } = rgbjs.v012.deriveAddress(w.descriptor, '&0/3')
+  const fund = parseTx('02000000' + '01' + '66'.repeat(32) + '00000000' + '00' + 'fdffffff' + '01' + bytesToHex(new Uint8Array(new BigUint64Array([20000n]).buffer)) + '22' + scriptPubkey + '00000000')
+  const coin = { outpoint: `${txid(fund)}:0`, sats: 20000, terminal: '&0/3', tx: bytesToHex(serializeTx(fund)) }
+  const contract = rgbjs.v012.issueContract({ consensus: 'bitcoin', testnet: true, method: 'issue', timestamp: '2026-10-25T12:00:00+00:00', name: 'ClubShares',
+    issuer: { codexId: 'mqmGvodN-WxpxyRb-RsGHiTQ-jDoRvMy-ClhrQGx-FMa5Cpw', version: 0, checksum: 'aiRB3w' },
+    global: [{ name: 'details', verified: null, unverified: 'One vote each.' }, { name: 'name', verified: 'Club Shares' }, { name: 'precision', verified: 'indivisible' }, { name: 'issued', verified: 100 }],
+    owned: [{ name: 'balance', seal: coin.outpoint, data: 100 }] }, w.noiseSeed)
+  const r = rgbjs.validateConsignment(contract)
+  eq(r.issuer.trusted, true, 'trusted RGB25 issuer'); eq(rgbjs.assetSummary(r).ticker, null, 'no ticker')
+  const payee = new Uint8Array(32).fill(8)
+  const inv = rgbjs.v012.createInvoice({ contractId: r.contractId, value: 30, outpoint: `${'77'.repeat(32)}:0`, noiseSeed: payee, nonce: 0 })
+  const p = rgbjs.v012.payInvoice({ contracts: contract, invoice: inv.invoice, descriptor: w.descriptor, coins: [coin], fee: 300, noiseSeed: w.noiseSeed, commit: 'tapret' })
+  const signed = signTx(p.tx, { [coin.outpoint]: { sats: coin.sats, script: scriptPubkey, key: w.signingKey(coin.terminal) } })
+  eq(txid(parseTx(signed)), p.txid, 'signed witness')
+  eq(rgbjs.v012.receive(p.transfer, { outpoint: `${'77'.repeat(32)}:0`, noiseSeed: payee, nonce: 0 }).receive.received[0].value, '30', 'payee receives')
+})
+
 await test('signTx refuses a key that does not match the coin', () => {
   const { scriptPubkey } = rgbjs.v012.deriveAddress(w.descriptor, '&0/0')
   const hex = '02000000' + '01' + '55'.repeat(32) + '00000000' + '00' + 'fdffffff' + '01' + '1027000000000000' + '22' + scriptPubkey + '00000000'
