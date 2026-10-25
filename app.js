@@ -461,6 +461,58 @@ async function signSend () {
 
 // ---- this wallet ---------------------------------------------------------
 
+/** Everything the seed can't rebuild. No keys: the seed is backed up apart. */
+export function assetBackup () {
+  return { kind: 'bunting-assets', version: 1, descriptor: w.descriptor, made: new Date().toISOString(),
+    contracts: state.contracts, seals: state.seals, nonce: state.nonce, tapret: state.tapret ?? {}, sent: state.sent }
+}
+
+/** Merges a backup into this wallet; returns what it added. Refuses another wallet's backup. */
+export function restoreAssets (b) {
+  if (b?.kind !== 'bunting-assets' || b.version !== 1) throw new Error('This isn\'t a Bunting asset backup.')
+  if (b.descriptor !== w.descriptor) throw new Error('This backup is from another wallet (its keys differ). Restore that wallet\'s seed first.')
+  const added = { files: 0, invalid: 0, seals: 0, tapret: 0, sent: 0 }
+  for (const [id, c] of Object.entries(b.contracts ?? {})) {
+    for (const f of c.files ?? []) {
+      const r = rgbjs.validateConsignment(fromBase64(f))
+      if (!r.valid || r.contractId !== id) { added.invalid++; continue }
+      state.contracts[id] ??= { files: [] }
+      if (!state.contracts[id].files.includes(f)) { state.contracts[id].files.push(f); added.files++ }
+    }
+    state.contracts[id] ??= { files: [] }
+  }
+  for (const s of b.seals ?? []) {
+    if (!state.seals.some(x => x.outpoint === s.outpoint && x.nonce === s.nonce)) { state.seals.push(s); added.seals++ }
+  }
+  // Never hand out a nonce twice: keep the highest counter either side has seen.
+  state.nonce = Math.max(state.nonce, b.nonce ?? 0, ...state.seals.map(s => s.nonce + 1))
+  for (const [script, rec] of Object.entries(b.tapret ?? {})) {
+    if (!(state.tapret ??= {})[script]) { state.tapret[script] = rec; added.tapret++ }
+  }
+  for (const s of b.sent ?? []) if (!state.sent.some(x => x.txid === s.txid)) { state.sent.push(s); added.sent++ }
+  persist()
+  return added
+}
+
+$('#backup').addEventListener('click', guard('#backup-out', () => {
+  const text = JSON.stringify(assetBackup(), null, 1)
+  download(new TextEncoder().encode(text), `bunting-assets${WALLET ? `-${WALLET}` : ''}-${new Date().toISOString().slice(0, 10)}.json`)
+  $('#backup-out').replaceChildren(note('ok', `Saved ${Object.keys(state.contracts).length} asset${Object.keys(state.contracts).length === 1 ? '' : 's'}, ${state.seals.length} invoice${state.seals.length === 1 ? '' : 's'} and ${Object.keys(state.tapret ?? {}).length} tapret coin record${Object.keys(state.tapret ?? {}).length === 1 ? '' : 's'}. It holds no keys, but it shows your history: keep it private.`))
+}))
+
+$('#restore-file').addEventListener('change', guard('#backup-out', async e => {
+  const file = e.target.files[0]
+  if (!file) return
+  e.target.value = ''
+  let b
+  try { b = JSON.parse(await file.text()) } catch { throw new Error('That file isn\'t JSON.') }
+  const a = restoreAssets(b)
+  computeHoldings(); render(); refresh()
+  $('#backup-out').replaceChildren(note(a.invalid ? 'warn' : 'ok',
+    `Restored ${a.files} contract file${a.files === 1 ? '' : 's'}, ${a.seals} invoice${a.seals === 1 ? '' : 's'}, ${a.tapret} tapret coin record${a.tapret === 1 ? '' : 's'} and ${a.sent} payment${a.sent === 1 ? '' : 's'}.`,
+    a.invalid ? ` ${a.invalid} file${a.invalid === 1 ? '' : 's'} didn't validate and ${a.invalid === 1 ? 'was' : 'were'} skipped.` : ''))
+}))
+
 $('#show-seed').addEventListener('click', () => { $('#seed').hidden = !$('#seed').hidden; $('#seed').textContent = state.seed })
 $('#wipe').addEventListener('click', () => { $('#wipe-confirm').hidden = false })
 $('#wipe-no').addEventListener('click', () => { $('#wipe-confirm').hidden = true })

@@ -132,6 +132,9 @@
     <section class="card">
       <h2>This wallet</h2>
       <p class="small">Explorer: <span id="api"></span>. Add <code>?api=&lt;Esplora URL&gt;</code> to use another, or <code>?wallet=&lt;name&gt;</code> for a separate wallet in this browser.</p>
+      <p class="small">Two backups. The seed brings back the keys; the asset backup brings back what the keys can't: your contract files, your invoices' secrets and your tapret change coins. Make a new asset backup after each payment.</p>
+      <div class="row"><button class="quiet" id="backup">Back up assets</button><label>Restore assets from a backup<input type="file" id="restore-file" accept=".json,application/json"></label></div>
+      <div id="backup-out"></div>
       <div class="row"><button class="quiet" id="show-seed">Show the seed</button><button class="quiet" id="wipe">Remove this wallet from the tab</button></div>
       <p class="mono" id="seed" hidden></p>
       <div id="wipe-confirm" hidden class="msg bad">This deletes the seed and every asset file from this tab. Without a backup of the seed, the coins and assets are gone. <div class="row"><button id="wipe-yes">Delete it</button><button class="quiet" id="wipe-no">Keep it</button></div></div>
