@@ -2,6 +2,7 @@
 // chain are in ./lib. Every asset file and invoice secret stays in this tab.
 import * as rgbjs from 'https://rgbjs.com/src/index.js'
 import { fromBase64, hexToBytes, bytesToHex, toBase64 } from './lib/bytes.js'
+import { sha256 } from './lib/deps.js'
 import * as chain from './lib/esplora.js'
 import { wallet } from './lib/keys.js'
 import { parentTxEvent, publish } from './lib/nostr.js'
@@ -85,6 +86,12 @@ async function scanCoins () {
     const { address, scriptPubkey } = v012.deriveAddress(w.descriptor, terminal)
     for (const u of await chain.utxos(address)) {
       found.push({ outpoint: `${u.txid}:${u.vout}`, sats: u.value, terminal, address, script: scriptPubkey, confirmed: u.status?.confirmed ? u.status.block_height : null })
+    }
+  }))
+  // RGB change committed with tapret pays to a tweaked key, not a plain address.
+  await Promise.all(Object.entries(state.tapret ?? {}).map(async ([script, t]) => {
+    for (const u of await chain.scriptUtxos(bytesToHex(sha256(hexToBytes(script))))) {
+      found.push({ outpoint: `${u.txid}:${u.vout}`, sats: u.value, terminal: t.terminal, merkleRoot: t.merkleRoot, address: null, script, confirmed: u.status?.confirmed ? u.status.block_height : null })
     }
   }))
   return found.sort((a, b) => b.sats - a.sats)
@@ -297,8 +304,10 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   // Only coins that carry this asset can be spent; rgbjs picks among them.
   const spendable = coins.filter(c => assetsOn(c.outpoint).includes(id))
   const withTx = await Promise.all(spendable.map(async c => ({ outpoint: c.outpoint, sats: c.sats, terminal: c.terminal, tx: await chain.txHex(c.outpoint.split(':')[0]) })))
+  // tapret: the commitment rides in the change output's taproot key, so the
+  // transaction has no OP_RETURN for a node's data-carrier policy to refuse.
   const p = v012.payInvoice({
-    contracts: files(id), invoice, descriptor: w.descriptor, coins: withTx, fee,
+    contracts: files(id), invoice, descriptor: w.descriptor, coins: withTx, fee, commit: 'tapret',
     seals: state.seals.filter(s => s.contractId === id).map(s => ({ outpoint: s.outpoint, nonce: s.nonce })),
     noiseSeed: w.noiseSeed
   })
@@ -312,7 +321,7 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   const out = parseTx(p.tx).outs
   $('#pay-out').replaceChildren(
     note('', el('div', {}, `Pays ${amount(h, inv.amount)} for a fee of ${fee} sats. `, `Spends ${spent.length} coin${spent.length === 1 ? '' : 's'}; ${out.length} outputs, the first commits to the RGB transfer.`),
-      el('div', { class: 'mono small' }, `witness ${p.txid}`)),
+      el('div', { class: 'mono small' }, `witness ${p.txid}`), el('div', { class: 'small' }, 'The commitment is inside the change output (tapret): no OP_RETURN.')),
     note('warn', 'Signing broadcasts the transaction to the BLAKE2b chain, through ', chain.apiBase(), ' and Nostr relays. It can\'t be taken back.',
       el('div', { class: 'row' }, el('button', { id: 'sign', onclick: guard('#pay-out', signAndSend) }, 'Sign and broadcast'), el('button', { class: 'quiet', onclick: () => { pending = null; $('#pay-out').replaceChildren() } }, 'Cancel')))
   )
@@ -327,7 +336,7 @@ async function signAndSend () {
   for (const op of spent) {
     const c = coins.find(x => x.outpoint === op)
     if (!c) throw new Error(`coin ${op} isn't in this wallet`)
-    keys[op] = { sats: c.sats, script: c.script, key: w.signingKey(c.terminal) }
+    keys[op] = { sats: c.sats, script: c.script, key: w.signingKey(c.terminal, c.merkleRoot) }
   }
   const signed = signTx(p.tx, keys)
   // Two routes, as some nodes' policies refuse what others accept: the
@@ -339,8 +348,10 @@ async function signAndSend () {
   const relayedOk = Object.values(relayed).filter(r => r === 'ok').length
   if (!direct.ok && !relayedOk) throw new Error(`Nothing took the transaction. Explorer: ${direct.text}. Relays: ${JSON.stringify(relayed)}`)
   const txid = p.txid
-  // Keep the payer's copy, which holds the change, alongside the earlier files.
+  // Keep the payer's copy, which holds the change, alongside the earlier files,
+  // and how to find and sign for the tapret change coin.
   state.contracts[id].files.push(toBase64(p.backup))
+  if (p.tapret) (state.tapret ??= {})[p.tapret.scriptPubkey] = { terminal: p.change.terminal, merkleRoot: p.tapret.merkleRoot }
   state.sent.push({ txid, contractId: id, invoice, transfer: toBase64(p.transfer), at: new Date().toISOString() })
   persist()
   const ticker = holdings.get(id)?.summary?.ticker ?? 'rgb'

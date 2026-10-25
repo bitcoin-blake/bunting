@@ -66,8 +66,10 @@ await test('issue, invoice, pay, sign: the signed transaction is the witness the
   const contractId = rgbjs.validateConsignment(contract).contractId
   const payee = new Uint8Array(32).fill(6)
   const inv = rgbjs.v012.createInvoice({ contractId, value: 25, outpoint: `${'44'.repeat(32)}:0`, noiseSeed: payee, nonce: 0 })
-  const p = rgbjs.v012.payInvoice({ contracts: contract, invoice: inv.invoice, descriptor: w.descriptor, coins: [coin], fee: 300, noiseSeed: w.noiseSeed })
+  const p = rgbjs.v012.payInvoice({ contracts: contract, invoice: inv.invoice, descriptor: w.descriptor, coins: [coin], fee: 300, noiseSeed: w.noiseSeed, commit: 'tapret' })
   const signed = signTx(p.tx, { [coin.outpoint]: { sats: coin.sats, script: scriptPubkey, key: w.signingKey(coin.terminal) } })
+  // The tapret change can be signed for: its tweaked key is the one it pays to.
+  eq(bytesToHex(schnorr.getPublicKey(w.signingKey(p.change.terminal, p.tapret.merkleRoot))), p.tapret.scriptPubkey.slice(4), 'tapret change key')
   const tx = parseTx(signed)
   eq(txid(tx), p.txid, 'signing leaves the txid alone')
   eq(tx.ins[0].witness[0].length, 64, 'a 64-byte key-path signature')
