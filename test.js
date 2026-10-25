@@ -3,6 +3,7 @@ import { bytesToHex, hexToBytes } from './lib/bytes.js'
 import { schnorr } from './lib/deps.js'
 import { tweak, wallet } from './lib/keys.js'
 import { parentTxEvent } from './lib/nostr.js'
+import { conversationKey, decrypt, encrypt, paddedLength } from './lib/nip44.js'
 import { blockHash, expectedBits, merkleRoot, parseHeader, powOk, target } from './lib/spv.js'
 import { addressScript } from './lib/address.js'
 import { buildTx, vsizeOf } from './lib/tx.js'
@@ -173,6 +174,22 @@ await test('difficulty: blake\'s real retarget at 153,216 and the 20-minute exce
   eq(expectedBits(153567, cur, prev, period), 0x1d00ffff, 'more than 20 minutes after the last block: minimum difficulty allowed')
   eq(cur.bits, 0x1d00ffff, 'and that is what block 153,567 carries')
   eq(expectedBits(153567, { time: prev.time + 600 }, prev, period), 0x190bca17, 'ten minutes after: the period\'s difficulty is required')
+})
+
+await test('NIP-44 v2: the spec\'s vectors for keys, padding, encryption and invalid payloads', async () => {
+  const v = (await (await fetch('https://raw.githubusercontent.com/paulmillr/nip44/main/nip44.vectors.json')).json()).v2
+  for (const c of v.valid.get_conversation_key) eq(bytesToHex(conversationKey(hexToBytes(c.sec1), c.pub2)), c.conversation_key, 'conversation key')
+  for (const [len, padded] of v.valid.calc_padded_len) eq(paddedLength(len), padded, `padded length of ${len}`)
+  for (const c of v.valid.encrypt_decrypt) {
+    const key = hexToBytes(c.conversation_key)
+    eq(encrypt(c.plaintext, key, hexToBytes(c.nonce)), c.payload, 'payload')
+    eq(decrypt(c.payload, key), c.plaintext, 'plaintext')
+  }
+  for (const c of v.invalid.decrypt) {
+    let threw = false
+    try { decrypt(c.payload, hexToBytes(c.conversation_key)) } catch { threw = true }
+    if (!threw) throw new Error(`accepted an invalid payload: ${c.note}`)
+  }
 })
 
 const failed = results.filter(r => !r).length

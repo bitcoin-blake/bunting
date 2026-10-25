@@ -9,6 +9,7 @@ import { parentTxEvent, publish } from './lib/nostr.js'
 import { WALLET, load, save, wipe } from './lib/store.js'
 import { addressScript } from './lib/address.js'
 import { agreesWithSignedTip, signedTip, verifyMined } from './lib/spv.js'
+import { inbox, nostrKey, sendTo } from './lib/deliver.js'
 import { buildTx, outpointOf, parseTx, signTx, txid as txidOf, vsizeOf } from './lib/tx.js'
 
 const { v012 } = rgbjs
@@ -29,6 +30,7 @@ const MIN_SATS = 1000 // a coin carrying an asset also pays the fee of spending 
 
 let state = load()
 let w = null
+let nk = null // this wallet's Nostr key, for transfers sent to it
 let coins = [] // [{ outpoint, sats, terminal, address, script, confirmed }]
 let holdings = new Map() // contractId -> { summary, cells: [{ outpoint, name, value }], witnesses }
 
@@ -70,6 +72,8 @@ const gzip = async b => new Uint8Array(await new Response(new Blob([b]).stream()
 const gunzip = async b => new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer())
 // Pay links use the query string; transfer links put their data after #, so
 // the payment history in them never reaches the web server.
+// A pay link names this wallet's Nostr key, so the payer can send the transfer back.
+const payLink = invoice => `${linkTo('pay', encodeURIComponent(invoice))}&to=${nk.pubkey}`
 const linkTo = (key, value, hash = false) => `${location.origin}${location.pathname}${hash ? '#' : '?'}${key}=${value}`
 
 /** A QR code (SVG, dark on white) for `text`, or nothing if the library didn't load. */
@@ -105,6 +109,7 @@ if (WALLET) {
 function start () {
   if (!state.seed) { $('#setup').hidden = false; return }
   w = wallet(hexToBytes(state.seed))
+  nk = nostrKey(hexToBytes(state.seed))
   $('#setup').hidden = true
   $('#main').hidden = false
   $('#address').textContent = v012.deriveAddress(w.descriptor, '&0/0').address
@@ -124,10 +129,12 @@ async function openLink () {
   const keep = new URLSearchParams()
   if (q.get('wallet')) keep.set('wallet', q.get('wallet'))
   history.replaceState(null, '', location.pathname + (keep.size ? `?${keep}` : ''))
+  const to = q.get('to') ?? h.get('to')
   if (pay) {
     $('#p-invoice').value = pay
+    if (to && /^[0-9a-f]{64}$/.test(to)) $('#p-to').value = to
     $('#pay-card').scrollIntoView({ block: 'start' })
-    $('#pay-out').replaceChildren(note('', 'Opened from a pay link. Check the invoice, then build the payment.'))
+    $('#pay-out').replaceChildren(note('', 'Opened from a pay link. Check the invoice, then build the payment.', to ? ' The transfer will go to the payee over Nostr.' : ''))
   }
   if (transfer) {
     $('#receive-card').scrollIntoView({ block: 'start' })
@@ -212,6 +219,7 @@ async function refresh () {
     render()
     checkWitnesses()
     renderPlainSent()
+    checkInbox()
   } catch (e) {
     $('#chain').textContent = `Couldn't reach the chain: ${e.message}`
   } finally { $('#refresh').disabled = false }
@@ -276,10 +284,30 @@ function renderOpenInvoices () {
     return el('div', { class: 'row small' },
       el('span', {}, `${amount(h, s.value)} to coin ${short(s.outpoint)}`),
       el('button', { class: 'quiet', onclick: e => copy(s.invoice, e.target) }, 'Copy'),
-      el('button', { class: 'quiet', onclick: e => copy(linkTo('pay', encodeURIComponent(s.invoice)), e.target) }, 'Pay link'),
-      el('button', { class: 'quiet', onclick: e => { const row = e.target.closest('.row'); row.nextElementSibling?.classList.contains('qr') ? row.nextElementSibling.remove() : row.after(qr(linkTo('pay', encodeURIComponent(s.invoice))) ?? '') } }, 'QR'),
+      el('button', { class: 'quiet', onclick: e => copy(payLink(s.invoice), e.target) }, 'Pay link'),
+      el('button', { class: 'quiet', onclick: e => { const row = e.target.closest('.row'); row.nextElementSibling?.classList.contains('qr') ? row.nextElementSibling.remove() : row.after(qr(payLink(s.invoice)) ?? '') } }, 'QR'),
       el('button', { class: 'quiet', onclick: () => { s.cancelled = true; persist(); render() } }, 'Cancel'))
   }))
+}
+
+// Transfers sent to this wallet over Nostr, taken in once each.
+async function checkInbox () {
+  const since = state.inboxSince ?? Math.floor(Date.now() / 1000) - 30 * 86400
+  const items = await inbox(nk, { since }).catch(() => [])
+  const seen = new Set(state.inboxSeen ?? [])
+  let newest = since
+  for (const it of items) {
+    newest = Math.max(newest, it.created_at)
+    if (seen.has(it.id)) continue
+    seen.add(it.id)
+    try {
+      takeIn(await gunzip(fromB64url(it.message.transfer)))
+      $('#accept-out').prepend(el('p', { class: 'small' }, `Delivered over Nostr${it.message.txid ? `, witness ${short(it.message.txid)}` : ''}:`))
+    } catch {} // not for this wallet's invoices, or not valid: ignored
+  }
+  state.inboxSeen = [...seen].slice(-200)
+  state.inboxSince = Math.max(since, newest - 3600)
+  persist()
 }
 
 // ---- getting started ----------------------------------------------------
@@ -420,9 +448,9 @@ $('#invoice').addEventListener('click', guard('#invoice-out', () => {
   if (!state.contracts[id]) state.contracts[id] = { files: [] }
   persist()
   const button = el('span', {}, el('button', { class: 'quiet', onclick: e => copy(inv.invoice, e.target) }, 'Copy invoice'), ' ',
-    el('button', { class: 'quiet', onclick: e => copy(linkTo('pay', encodeURIComponent(inv.invoice)), e.target) }, 'Copy a pay link'))
+    el('button', { class: 'quiet', onclick: e => copy(payLink(inv.invoice), e.target) }, 'Copy a pay link'))
   $('#invoice-out').replaceChildren(note('ok', el('div', { class: 'mono' }, inv.invoice), el('div', { class: 'row' }, button),
-    el('div', { class: 'row' }, qr(linkTo('pay', encodeURIComponent(inv.invoice))), el('span', { class: 'small' }, 'Scan to pay: it opens Bunting with this invoice ready.')),
+    el('div', { class: 'row' }, qr(payLink(inv.invoice)), el('span', { class: 'small' }, 'Scan to pay: it opens Bunting with this invoice ready.')),
     el('p', { class: 'small' }, `Paid to coin ${short(coin.outpoint)}. When the payer sends you the transfer file, take it in below.`)))
 }))
 
@@ -539,7 +567,13 @@ async function signAndSend () {
   const sent = note('ok', 'Sent: ', link(`/tx/${txid}`, short(txid)), direct.ok ? ' (the explorer has it)' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it, so it shows there once mined)`, '. ')
   // An invoice this wallet made: the payment is already ours, nothing to hand over.
   if (state.seals.some(s => s.invoice === invoice)) sent.append('It pays one of this wallet\'s own invoices, so there is nothing to hand over.')
-  else sent.append('Now give the payee the transfer file; they need it to see the payment.', handOver(p.transfer, name))
+  else {
+    const to = $('#p-to').value.trim().toLowerCase()
+    if (/^[0-9a-f]{64}$/.test(to)) {
+      const acks = Object.values(await sendTo(to, { invoice, txid, transfer: b64url(await gzip(p.transfer)) }).catch(() => ({}))).filter(r => r === 'ok').length
+      sent.append(acks ? `The transfer went to the payee over Nostr (${acks} relay${acks === 1 ? '' : 's'}); their wallet takes it in when it refreshes. ` : 'Sending the transfer over Nostr failed; give it to the payee another way. ', acks ? 'A copy, in case: ' : '', handOver(p.transfer, name))
+    } else sent.append('Now give the payee the transfer; they need it to see the payment.', handOver(p.transfer, name))
+  }
   $('#pay-out').replaceChildren(sent)
   setTimeout(refresh, 3000)
 }

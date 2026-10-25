@@ -114,6 +114,7 @@
       </div>
       <div id="invoice-out"></div>
       <div id="open-invoices"></div>
+      <p class="small" id="inbox-note">Transfers sent to this wallet over Nostr are taken in when it refreshes.</p>
       <div class="row"><label>Got a transfer file? Take it in<input type="file" id="accept-file" accept=".rgb"></label></div>
       <div id="accept-out"></div>
     </section>
@@ -121,6 +122,7 @@
     <section class="card" id="pay-card">
       <h2>Pay</h2>
       <label>Invoice<textarea id="p-invoice" placeholder="contract:tb@…"></textarea></label>
+      <div class="row"><label>Payee's Nostr key, to send them the transfer (optional; pay links include it)<input id="p-to" class="mono" placeholder="64 hex characters" autocomplete="off"></label></div>
       <div class="row"><label>Fee rate (sat/vB)<input id="p-rate" value="1" inputmode="decimal"></label><button id="build">Build the payment</button></div>
       <div id="pay-out"></div>
       <div id="sent"></div>
