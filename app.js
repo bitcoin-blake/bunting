@@ -326,9 +326,10 @@ async function checkWitnesses () {
     }
   }
   const agree = await agreesWithSignedTip(signed)
-  if (signed && agree !== null) {
+  if (!signed) $('#chain').append(' · no signed tip from Nostr yet')
+  else if (agree !== null) {
     $('#chain').append(agree
-      ? ` · matches the tip signed on Nostr at block ${signed.height.toLocaleString()}`
+      ? ` · signed tip ${signed.height.toLocaleString()} on Nostr, matching`
       : el('span', { style: 'color: var(--bad)' }, ` · disagrees with the tip signed on Nostr at block ${signed.height.toLocaleString()}`))
   }
 }
