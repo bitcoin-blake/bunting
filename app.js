@@ -343,7 +343,9 @@ async function checkWitnesses () {
     }
   }
   const agree = await agreesWithSignedTip(signed)
-  if (!signed) $('#chain').append(' · no signed tip from Nostr yet')
+  const age = s => { const h = Math.round((Date.now() / 1000 - s.created_at) / 3600); return h < 48 ? `${h} hours` : `${Math.round(h / 24)} days` }
+  if (!signed) $('#chain').append(' · no signed tip from Nostr reached')
+  else if (signed.stale) $('#chain').append(` · the newest signed tip reached on Nostr is ${age(signed)} old (block ${signed.height.toLocaleString()}), so confirmations rest on the header checks alone`)
   else if (agree !== null) {
     $('#chain').append(agree
       ? ` · signed tip ${signed.height.toLocaleString()} on Nostr, matching`
