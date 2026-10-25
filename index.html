@@ -43,6 +43,8 @@
   .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; border-left: 4px solid var(--accent); background: var(--bg) } .msg.ok { border-color: var(--ok) } .msg.warn { border-color: var(--warn) } .msg.bad { border-color: var(--bad) }
   .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
   [hidden] { display: none !important }
+  .qr { display: inline-block; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid var(--line); line-height: 0 }
+  .qr svg { width: 180px; height: 180px; max-width: 100% }
   .steps { margin: 8px 0 0; padding-left: 0; list-style: none; display: grid; gap: 10px }
   .steps li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start }
   .steps .mark { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--muted) }
@@ -76,7 +78,8 @@
       <h2>Coins</h2>
       <p class="small">Send txbt4 to this address. Each coin can carry one RGB asset.</p>
       <p class="mono" id="address"></p>
-      <div class="row"><button class="quiet" id="copy-address">Copy address</button><button class="quiet" id="refresh">Refresh</button></div>
+      <div class="row"><button class="quiet" id="copy-address">Copy address</button><button class="quiet" id="show-address-qr">QR code</button><button class="quiet" id="refresh">Refresh</button></div>
+      <div id="address-qr" hidden></div>
       <div class="scroll"><table id="coins"></table></div>
     </section>
 
@@ -157,5 +160,6 @@
     <p class="small">Bunting uses <a href="https://rgbjs.com">rgbjs</a> for RGB and signs and broadcasts here. <a href="test.html">Tests</a> · <a href="https://github.com/bitcoin-blake/bunting">Source</a></p>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module" src="app.js"></script>
 </html>

@@ -72,6 +72,17 @@ const gunzip = async b => new Uint8Array(await new Response(new Blob([b]).stream
 // the payment history in them never reaches the web server.
 const linkTo = (key, value, hash = false) => `${location.origin}${location.pathname}${hash ? '#' : '?'}${key}=${value}`
 
+/** A QR code (SVG, dark on white) for `text`, or nothing if the library didn't load. */
+function qr (text) {
+  if (!window.qrcode) return null
+  const q = window.qrcode(0, 'M')
+  q.addData(text)
+  q.make()
+  const box = el('div', { class: 'qr', role: 'img', 'aria-label': 'QR code' })
+  box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true })
+  return box
+}
+
 /** The ways to hand a transfer file to its payee: a link to open, or the file. */
 function handOver (bytes, name) {
   return el('div', { class: 'row' },
@@ -208,6 +219,11 @@ async function refresh () {
 $('#refresh').addEventListener('click', refresh)
 for (const id of ['#p-rate', '#s-rate']) $(id).addEventListener('input', e => { e.target.dataset.touched = '1' })
 $('#copy-address').addEventListener('click', e => copy($('#address').textContent, e.target))
+$('#show-address-qr').addEventListener('click', () => {
+  const box = $('#address-qr')
+  box.hidden = !box.hidden
+  if (!box.hidden) box.replaceChildren(qr($('#address').textContent) ?? 'The QR library didn\'t load.')
+})
 
 function render () {
   const sats = coins.reduce((n, c) => n + c.sats, 0)
@@ -261,6 +277,7 @@ function renderOpenInvoices () {
       el('span', {}, `${amount(h, s.value)} to coin ${short(s.outpoint)}`),
       el('button', { class: 'quiet', onclick: e => copy(s.invoice, e.target) }, 'Copy'),
       el('button', { class: 'quiet', onclick: e => copy(linkTo('pay', encodeURIComponent(s.invoice)), e.target) }, 'Pay link'),
+      el('button', { class: 'quiet', onclick: e => { const row = e.target.closest('.row'); row.nextElementSibling?.classList.contains('qr') ? row.nextElementSibling.remove() : row.after(qr(linkTo('pay', encodeURIComponent(s.invoice))) ?? '') } }, 'QR'),
       el('button', { class: 'quiet', onclick: () => { s.cancelled = true; persist(); render() } }, 'Cancel'))
   }))
 }
@@ -403,6 +420,7 @@ $('#invoice').addEventListener('click', guard('#invoice-out', () => {
   const button = el('span', {}, el('button', { class: 'quiet', onclick: e => copy(inv.invoice, e.target) }, 'Copy invoice'), ' ',
     el('button', { class: 'quiet', onclick: e => copy(linkTo('pay', encodeURIComponent(inv.invoice)), e.target) }, 'Copy a pay link'))
   $('#invoice-out').replaceChildren(note('ok', el('div', { class: 'mono' }, inv.invoice), el('div', { class: 'row' }, button),
+    el('div', { class: 'row' }, qr(linkTo('pay', encodeURIComponent(inv.invoice))), el('span', { class: 'small' }, 'Scan to pay: it opens Bunting with this invoice ready.')),
     el('p', { class: 'small' }, `Paid to coin ${short(coin.outpoint)}. When the payer sends you the transfer file, take it in below.`)))
 }))
 
