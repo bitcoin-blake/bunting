@@ -235,7 +235,8 @@ $('#invoice').addEventListener('click', guard('#invoice-out', () => {
   if (frac.length > decimals) throw new Error(`This asset has ${decimals} decimal places.`)
   const value = BigInt(whole + frac.padEnd(decimals, '0')).toString()
   // The payment lands on one of your coins: one with no other asset on it.
-  const coin = coins.find(c => assetsOn(c.outpoint).every(x => x === id))
+  // Prefer an empty coin: paying from a coin can't also pay into it.
+  const coin = coins.find(c => !assetsOn(c.outpoint).length) ?? coins.find(c => assetsOn(c.outpoint).every(x => x === id))
   if (!coin) throw new Error('Every coin here already carries another asset, and Bunting keeps one asset per coin. Send yourself another coin first.')
   const nonce = state.nonce++
   const inv = v012.createInvoice({ contractId: id, value, outpoint: coin.outpoint, noiseSeed: w.noiseSeed, nonce })
@@ -304,6 +305,8 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   const spent = parseTx(p.tx).ins.map(outpointOf)
   const other = spent.flatMap(op => assetsOn(op).filter(x => x !== id))
   if (other.length) throw new Error(`This payment would spend a coin that also carries ${other.join(', ')}, which would be lost. Bunting won't sign it.`)
+  const own = state.seals.find(s => s.invoice === invoice || (s.contractId === id && spent.includes(s.outpoint) && invoice.includes(v012.createInvoice({ contractId: id, value: s.value, outpoint: s.outpoint, noiseSeed: w.noiseSeed, nonce: s.nonce }).authToken)))
+  if (own && spent.includes(own.outpoint)) throw new Error('This invoice pays to a coin this payment would spend, so the asset would be lost. Make the invoice on another coin.')
   pending = { p, id, invoice, spent }
   const out = parseTx(p.tx).outs
   $('#pay-out').replaceChildren(
