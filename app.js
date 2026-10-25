@@ -151,17 +151,20 @@ const amount = (h, raw) => h?.summary ? `${rgbjs.formatAmount(String(raw), h.sum
 async function refresh () {
   $('#refresh').disabled = true
   try {
-    const [height, found] = await Promise.all([chain.tip(), scanCoins()])
+    const [height, found, rate] = await Promise.all([chain.tip(), scanCoins(), chain.feeRate(2).catch(() => 1)])
+    for (const id of ['#p-rate', '#s-rate']) if (!$(id).dataset.touched) $(id).value = String(rate)
     coins = found
     $('#chain').textContent = `txbt4 at block ${height.toLocaleString()} · ${chain.apiBase().replace(/^https:\/\//, '')}`
     computeHoldings()
     render()
     checkWitnesses()
+    renderPlainSent()
   } catch (e) {
     $('#chain').textContent = `Couldn't reach the chain: ${e.message}`
   } finally { $('#refresh').disabled = false }
 }
 $('#refresh').addEventListener('click', refresh)
+for (const id of ['#p-rate', '#s-rate']) $(id).addEventListener('input', e => { e.target.dataset.touched = '1' })
 $('#copy-address').addEventListener('click', e => copy($('#address').textContent, e.target))
 
 function render () {
@@ -328,19 +331,25 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   const id = inv.contractId
   const h = holdings.get(id)
   if (!h || !h.cells.length) throw new Error('You hold none of this asset here.')
-  const fee = Number($('#p-fee').value)
-  if (!Number.isSafeInteger(fee) || fee < 150) throw new Error('The fee is a whole number of sats, at least 150.')
+  const rate = Number($('#p-rate').value)
+  if (!(rate >= 1 && rate <= 1000)) throw new Error('The fee rate is a number of sat/vB, at least 1.')
   $('#pay-out').replaceChildren(note('', 'Building the payment…'))
   // Only coins that carry this asset can be spent; rgbjs picks among them.
   const spendable = coins.filter(c => assetsOn(c.outpoint).includes(id))
   const withTx = await Promise.all(spendable.map(async c => ({ outpoint: c.outpoint, sats: c.sats, terminal: c.terminal, tx: await chain.txHex(c.outpoint.split(':')[0]) })))
   // tapret: the commitment rides in the change output's taproot key, so the
   // transaction has no OP_RETURN for a node's data-carrier policy to refuse.
-  const p = v012.payInvoice({
+  const build = fee => v012.payInvoice({
     contracts: files(id), invoice, descriptor: w.descriptor, coins: withTx, fee, commit: 'tapret',
     seals: state.seals.filter(s => s.contractId === id).map(s => ({ outpoint: s.outpoint, nonce: s.nonce })),
     noiseSeed: w.noiseSeed
   })
+  // Build once to learn the transaction's shape, then again with the exact
+  // fee for its size: the inputs and outputs stay the same, only the change shrinks.
+  const sized = tx => { const x = parseTx(tx); return vsizeOf(x.ins.length, x.outs.map(o => bytesToHex(o.script))) }
+  let p = build(Math.ceil(rate * 200))
+  const fee = Math.ceil(rate * sized(p.tx))
+  p = build(fee)
   // One asset per coin: refuse a payment that would spend a coin carrying another.
   const spent = parseTx(p.tx).ins.map(outpointOf)
   const other = spent.flatMap(op => assetsOn(op).filter(x => x !== id))
@@ -350,9 +359,9 @@ $('#build').addEventListener('click', guard('#pay-out', async () => {
   pending = { p, id, invoice, spent }
   const out = parseTx(p.tx).outs
   $('#pay-out').replaceChildren(
-    note('', el('div', {}, `Pays ${amount(h, inv.amount)} for a fee of ${fee} sats. `, `Spends ${spent.length} coin${spent.length === 1 ? '' : 's'} and makes ${out.length} output${out.length === 1 ? '' : 's'}; the change at output ${p.change?.vout} carries the RGB commitment and what's left of the asset.`),
+    note('', el('div', {}, `Pays ${amount(h, inv.amount)} for a fee of ${fee} sats (${rate} sat/vB). `, `Spends ${spent.length} coin${spent.length === 1 ? '' : 's'} and makes ${out.length} output${out.length === 1 ? '' : 's'}; the change at output ${p.change?.vout} carries the RGB commitment and what's left of the asset.`),
       el('div', { class: 'mono small' }, `witness ${p.txid}`), el('div', { class: 'small' }, 'The commitment is inside the change output\'s taproot key (tapret), so there is no OP_RETURN output.')),
-    note('warn', 'Signing broadcasts the transaction to the BLAKE2b chain, through ', chain.apiBase(), ' and Nostr relays. It can\'t be taken back.',
+    note('warn', 'Signing broadcasts the transaction to the BLAKE2b chain, through ', chain.apiBase(), ' and Nostr relays. It can\'t be taken back, and its fee can\'t be raised later: a replacement would no longer match the transfer file the payee gets.',
       el('div', { class: 'row' }, el('button', { id: 'sign', onclick: guard('#pay-out', signAndSend) }, 'Sign and broadcast'), el('button', { class: 'quiet', onclick: () => { pending = null; $('#pay-out').replaceChildren() } }, 'Cancel')))
   )
 }))
@@ -411,7 +420,7 @@ function planSend (outputs, rate) {
       const left = have - want - fee
       // Change below dust goes to the fee instead.
       const outs = left >= DUST ? [...outputs, { script: change, sats: left }] : outputs
-      return { inputs, outputs: outs, fee: have - outs.reduce((n, o) => n + o.sats, 0), change: left >= DUST ? left : 0 }
+      return { inputs, outputs: outs, fee: have - outs.reduce((n, o) => n + o.sats, 0), change: left >= DUST ? left : 0, rate }
     }
   }
   throw new Error(`Not enough in coins without assets: ${have.toLocaleString()} sats spendable here.`)
@@ -456,7 +465,36 @@ async function signSend () {
   const relayedOk = Object.values(relayed).filter(r => r === 'ok').length
   if (!direct.ok && !relayedOk) throw new Error(`Nothing took the transaction. Explorer: ${direct.text}`)
   $('#send-out').replaceChildren(note('ok', 'Sent: ', link(`/tx/${id}`, short(id)), direct.ok ? '.' : ` (handed to ${relayedOk} Nostr relay${relayedOk === 1 ? '' : 's'}; the explorer's node refused it).`))
+  // Kept so its fee can be raised while it waits.
+  ;(state.plainSent ??= []).push({ txid: id, inputs: plan.inputs, outputs: plan.outputs, fee: plan.fee, rate: plan.rate, at: new Date().toISOString() })
+  persist()
   setTimeout(refresh, 3000)
+}
+
+async function renderPlainSent () {
+  const waiting = []
+  for (const s of (state.plainSent ?? []).slice(-5)) {
+    const st = await chain.txStatus(s.txid).catch(() => null)
+    if (st && !st.confirmed) waiting.push(s)
+  }
+  $('#plain-sent').replaceChildren(...(waiting.length ? [el('h3', { class: 'small' }, 'Waiting for a block')] : []),
+    ...waiting.map(s => el('div', { class: 'row small' },
+      el('span', { class: 'mono' }, link(`/tx/${s.txid}`, short(s.txid))), el('span', {}, `${s.rate} sat/vB, fee ${s.fee}`),
+      el('button', { class: 'quiet', onclick: guard('#send-out', () => bump(s)) }, 'Raise the fee'))))
+}
+
+// BIP125: the same coins, the same payments, less change, a higher rate.
+function bump (old) {
+  const rate = Math.max(old.rate * 1.5, old.rate + 1)
+  const vsize = vsizeOf(old.inputs.length, old.outputs.map(o => o.script))
+  const fee = Math.ceil(rate * vsize)
+  const change = v012.deriveAddress(w.descriptor, PLAIN_CHANGE).scriptPubkey
+  const outputs = old.outputs.map(o => ({ ...o }))
+  const c = outputs.find(o => o.script === change)
+  if (!c) throw new Error('This send has no change to take a higher fee from.')
+  c.sats -= fee - old.fee
+  if (c.sats < DUST) throw new Error('Not enough change left to raise the fee.')
+  showSend({ inputs: old.inputs, outputs, fee, rate, change: c.sats, replaces: old.txid }, `Replaces ${short(old.txid)} at ${rate} sat/vB.`)
 }
 
 // ---- this wallet ---------------------------------------------------------

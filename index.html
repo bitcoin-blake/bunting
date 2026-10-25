@@ -104,7 +104,7 @@
     <section class="card">
       <h2>Pay</h2>
       <label>Invoice<textarea id="p-invoice" placeholder="contract:tb@…"></textarea></label>
-      <div class="row"><label>Fee (sats)<input id="p-fee" value="500" inputmode="numeric"></label><button id="build">Build the payment</button></div>
+      <div class="row"><label>Fee rate (sat/vB)<input id="p-rate" value="1" inputmode="decimal"></label><button id="build">Build the payment</button></div>
       <div id="pay-out"></div>
       <div id="sent"></div>
     </section>
@@ -127,6 +127,7 @@
       </div>
       <p class="small">Spare coins are for invoices and new assets: each coin carries at most one asset.</p>
       <div id="send-out"></div>
+      <div id="plain-sent"></div>
     </section>
 
     <section class="card">
