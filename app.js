@@ -242,6 +242,8 @@ async function refresh () {
     checkInbox()
   } catch (e) {
     $('#chain').textContent = `Couldn't reach the chain: ${e.message}`
+    // Still show what the tab knows: its assets, invoices and the guide.
+    try { computeHoldings(); render() } catch {}
   } finally { $('#refresh').disabled = false }
 }
 $('#refresh').addEventListener('click', refresh)

@@ -21,7 +21,7 @@ RGB assets on the Bitcoin BLAKE2b testnet4 (txbt4), in a browser tab: issue a to
 
 Each coin carries at most one asset, and Bunting won't sign a payment that would also spend a coin carrying another asset, which would lose it.
 
-The explorer is [mempool.guide](https://mempool.guide/testnet4/) (an Esplora API); `?api=<esplora url>` uses another. Bunting talks to it for coins, transactions, broadcasts and headers, to Nostr relays for broadcasts and the signed tip, and to the CDNs below for code. Nothing else leaves the tab.
+The explorer is [mempool.guide](https://mempool.guide/testnet4/) (its Esplora API at `/testnet4/api/v1`, which web pages may read); `?api=<esplora url>` uses another. Bunting talks to it for coins, transactions, broadcasts and headers, to Nostr relays for broadcasts and the signed tip, and to the CDNs below for code. Nothing else leaves the tab.
 
 ## Layout
 
