@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bunting</title>
@@ -19,154 +20,438 @@
 <meta name="twitter:description" content="Issue, invoice, pay and receive RGB assets on the Bitcoin BLAKE2b chain, in the browser. Payments commit with tapret: no OP_RETURN.">
 <meta name="twitter:image" content="https://bitcoin-blake.github.io/bunting/og.png?v=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M1 3h30%27 stroke=%27%235d6474%27 stroke-width=%272%27/%3E%3Cpath d=%27M2 4h9l-4.5 14z%27 fill=%27%23c8372d%27/%3E%3Cpath d=%27M11.5 4h9l-4.5 14z%27 fill=%27%23e9a23b%27/%3E%3Cpath d=%27M21 4h9l-4.5 14z%27 fill=%27%231f4e8c%27/%3E%3C/svg%3E">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  :root { --bg: #f7f5ef; --card: #fffdf8; --fg: #1d2433; --muted: #5d6474; --line: #e2ddd0; --accent: #1f4e8c; --ok: #1f7a4d; --warn: #9a6400; --bad: #b3261e;
-    --f1: #c8372d; --f2: #e9a23b; --f3: #2f7d5b; --f4: #1f4e8c; color-scheme: light }
-  @media (prefers-color-scheme: dark) { :root { --bg: #12161f; --card: #1a202c; --fg: #e8e6df; --muted: #a2a8b6; --line: #2c3444; --accent: #7fa8e6; --ok: #5fc08e; --warn: #e3b25a; --bad: #f08a80; color-scheme: dark } }
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --field: #fbfcfd; --inset: #f7f8fa; --fg: #172033; --muted: #657085;
+    --line: #e1e5eb; --line-strong: #cdd4df; --accent: #4965db; --accent-hover: #3854c7; --on-accent: #fff;
+    --accent-soft: #eef1ff; --focus: rgba(73, 101, 219, .16); --ok: #197853; --warn: #946315; --bad: #b83d3d;
+    --ok-soft: #f0f9f4; --warn-soft: #fdf8ed; --bad-soft: #fdf2f2; --logo: #172033; --logo-string: #f5f6f8;
+    --f1: #ef6a62; --f2: #efb94f; --f3: #4caf91; --f4: #637de3; --f5: #9a73d1;
+    --hero-string: #9aa5b7; --hero-gradient: linear-gradient(105deg, #4965db 5%, #7562ce 52%, #b56187 100%);
+    --shadow: 0 1px 2px rgba(23, 32, 51, .03), 0 12px 34px rgba(23, 32, 51, .045);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d121b; --card: #151c28; --field: #111823; --inset: #111822; --fg: #ecf0f7; --muted: #9aa6b8;
+      --line: #293345; --line-strong: #3a465b; --accent: #96a9ff; --accent-hover: #b0beff; --on-accent: #11182c;
+      --accent-soft: rgba(121, 143, 245, .12); --focus: rgba(150, 169, 255, .18); --ok: #6bc69e; --warn: #e2b96b; --bad: #ef9494;
+      --ok-soft: rgba(64, 157, 116, .09); --warn-soft: rgba(196, 148, 61, .09); --bad-soft: rgba(197, 80, 80, .09);
+      --logo: #e9edf5; --logo-string: #172033; --hero-string: #657188;
+      --hero-gradient: linear-gradient(105deg, #9cacff 5%, #b7a2ed 52%, #e39ab5 100%);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 16px 40px rgba(0, 0, 0, .12);
+      color-scheme: dark;
+    }
+  }
   * { box-sizing: border-box }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 'IBM Plex Sans', system-ui, sans-serif; }
-  .wrap { max-width: 820px; margin: 0 auto; padding: 28px max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px)); }
-  .flags { display: flex; gap: 6px; height: 14px; margin-bottom: 18px }
-  .flags i { flex: 1; clip-path: polygon(0 0, 100% 0, 50% 100%); background: var(--f1) } .flags i:nth-child(4n+2) { background: var(--f2) } .flags i:nth-child(4n+3) { background: var(--f3) } .flags i:nth-child(4n) { background: var(--f4) }
-  h1 { font-size: 30px; margin: 0; letter-spacing: -.01em } h2 { font-size: 18px; margin: 0 0 10px }
-  .lede { color: var(--muted); margin: 4px 0 0 } .small { font-size: 13px; color: var(--muted) }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 18px; min-width: 0 }
-  .mono, code, textarea { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; overflow-wrap: anywhere }
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 10px }
-  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); flex: 1 1 150px; min-width: 0 }
-  input, select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0 }
-  textarea { min-height: 70px; resize: vertical }
-  button { font: 500 14px 'IBM Plex Sans', sans-serif; border: 0; border-radius: 8px; padding: 9px 14px; background: var(--accent); color: #fff; cursor: pointer }
-  button.quiet { background: transparent; color: var(--accent); border: 1px solid var(--line) } button:disabled { opacity: .5; cursor: default }
-  .scroll { overflow-x: auto } table { width: 100%; border-collapse: collapse; font-size: 14px } th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top } th { font-weight: 500; color: var(--muted); font-size: 13px }
-  .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; border-left: 4px solid var(--accent); background: var(--bg) } .msg.ok { border-color: var(--ok) } .msg.warn { border-color: var(--warn) } .msg.bad { border-color: var(--bad) }
-  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px }
+  body {
+    margin: 0; min-width: 320px; min-height: 100vh; color: var(--fg);
+    background:
+      radial-gradient(ellipse 60% 430px at 92% -60px, rgba(85, 108, 218, .12), transparent 72%),
+      radial-gradient(ellipse 36% 340px at -8% 340px, rgba(239, 185, 79, .07), transparent 74%),
+      var(--bg);
+    font: 15px/1.6 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { color: var(--fg); background: var(--accent-soft) }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px }
+  a:hover { color: var(--accent-hover) }
+  button, input, select, textarea { font: inherit }
+  button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent }
   [hidden] { display: none !important }
-  .qr { display: inline-block; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid var(--line); line-height: 0 }
-  .qr svg { width: 180px; height: 180px; max-width: 100% }
-  .steps { margin: 8px 0 0; padding-left: 0; list-style: none; display: grid; gap: 10px }
-  .steps li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start }
-  .steps .mark { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--muted) }
-  .steps .done .mark { background: var(--ok); border-color: var(--ok); color: #fff }
-  .steps .done .what { color: var(--muted) }
-  .steps .what b { display: block }
-</style>
-<div class="wrap">
-  <div class="flags" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-  <h1>Bunting</h1>
-  <p class="lede">RGB assets on the Bitcoin BLAKE2b chain (txbt4), in this tab. Test coins only.</p>
-  <p class="small" id="wallet-name" hidden></p>
-  <p class="small" id="chain">Connecting to the chain…</p>
+  .skip-link { position: fixed; top: 10px; left: 10px; z-index: 100; padding: 10px 14px; border-radius: 8px; color: var(--on-accent); background: var(--accent); transform: translateY(-150%) }
+  .skip-link:focus { transform: translateY(0) }
+  .shell { width: min(1200px, 100%); margin: 0 auto; padding: 0 max(28px, env(safe-area-inset-right, 0px)) 0 max(28px, env(safe-area-inset-left, 0px)) }
 
-  <section class="card" id="setup" hidden>
-    <h2>Start a wallet</h2>
-    <p>A random seed is made and kept in this tab. It holds the keys to your coins and the secrets of your RGB assets: back it up.</p>
-    <div class="row"><button id="create">Create a wallet</button></div>
-    <div class="row"><label>Or restore from a seed (64 hex characters)<input id="restore-seed" class="mono" autocomplete="off"></label><button class="quiet" id="restore">Restore</button></div>
-    <div class="row"><label>Or from a wallet backup file<input type="file" id="vault-file" accept=".json,application/json"></label><label>Its passphrase<input type="password" id="vault-pass" autocomplete="off"></label><button class="quiet" id="vault-restore">Restore</button></div>
-    <div id="vault-out"></div>
+  .topbar { min-height: 92px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--line) }
+  .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--fg); text-decoration: none }
+  .brand:hover { color: var(--fg) }
+  .brand-mark { width: 40px; height: 40px; flex: none }
+  .brand-name { font-size: 23px; font-weight: 700; letter-spacing: -.045em }
+  .brand-tag { margin-left: 2px; padding-left: 14px; border-left: 1px solid var(--line-strong); color: var(--muted); font: 10px/1.4 'IBM Plex Mono', monospace; letter-spacing: .12em; text-transform: uppercase }
+  .topbar-actions { display: flex; align-items: center; gap: 22px }
+  .network-badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 99px; background: var(--card); color: var(--muted); font: 500 10px/1 'IBM Plex Mono', monospace; letter-spacing: .09em }
+  .network-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--f2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--f2) 18%, transparent) }
+  .source-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: none }
+  .source-link:hover { color: var(--fg) }
+  .source-link svg { width: 15px; height: 15px }
+
+  .hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, .65fr); align-items: center; gap: 36px; min-height: 390px; padding: 46px 0 44px }
+  .hero-copy { position: relative; z-index: 1; animation: enter .65s ease-out both }
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--accent); font: 500 10px/1.5 'IBM Plex Mono', monospace; letter-spacing: .16em; text-transform: uppercase }
+  .eyebrow::before { content: ''; width: 24px; height: 1px; background: currentColor }
+  h1 { max-width: 730px; margin: 18px 0 22px; font-size: clamp(48px, 6vw, 74px); font-weight: 600; line-height: 1.01; letter-spacing: -.06em }
+  h1 span { color: var(--accent); background: var(--hero-gradient); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent }
+  .lede { max-width: 620px; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.65; letter-spacing: -.01em }
+  .hero-points { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 27px }
+  .hero-point { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 500 }
+  .hero-point svg { width: 15px; height: 15px; color: var(--accent) }
+  .hero-art { position: relative; width: 100%; max-width: 430px; justify-self: end; animation: enter .8s .08s ease-out both }
+  .art-frame { position: relative; aspect-ratio: 1.25 }
+  .art-frame::before { content: ''; position: absolute; inset: 16% 8% 5%; border-radius: 50%; background: var(--accent-soft); filter: blur(35px) }
+  .art-frame::after { content: ''; position: absolute; z-index: -1; right: -10px; bottom: 8px; width: 100px; height: 100px; opacity: .22; background-image: radial-gradient(var(--muted) 1px, transparent 1px); background-size: 10px 10px }
+  .hero-illustration { position: relative; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 14px 12px rgba(23, 32, 51, .08)) }
+  .float-chip { position: absolute; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--card) 90%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(12px); animation: float 6s ease-in-out infinite }
+  .float-chip b { display: block; font-size: 12px; font-weight: 600; line-height: 1.3 }
+  .float-chip small { display: block; margin-top: 2px; color: var(--muted); font: 8px/1.4 'IBM Plex Mono', monospace; letter-spacing: .1em }
+  .chip-rgb { top: 5%; right: -2% }
+  .chip-local { bottom: 0; left: -3%; animation-delay: -3s }
+  .rgb-dot { width: 25px; height: 25px; border-radius: 50%; background: conic-gradient(var(--f1), var(--f2), var(--f3), var(--f4), var(--f5), var(--f1)); box-shadow: inset 0 0 0 5px var(--card) }
+  .chip-local > svg { width: 23px; height: 23px; color: var(--accent) }
+
+  .connection-bar { display: flex; align-items: center; gap: 13px; min-height: 62px; margin-bottom: 26px; padding: 12px 17px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--card) 78%, transparent); box-shadow: 0 4px 18px rgba(23, 32, 51, .025) }
+  .connection-mark { display: grid; place-items: center; width: 31px; height: 31px; flex: none; border-radius: 9px; color: var(--accent); background: var(--accent-soft) }
+  .connection-mark svg { width: 16px; height: 16px }
+  .connection-copy { flex: 1; min-width: 0 }
+  .connection-label { display: block; margin-bottom: 1px; color: var(--muted); font: 500 8px/1.4 'IBM Plex Mono', monospace; letter-spacing: .14em }
+  #chain { margin: 0; overflow-wrap: anywhere; color: var(--muted); font: 11px/1.55 'IBM Plex Mono', monospace }
+  #wallet-name { flex: none; max-width: 260px; margin: 0; padding-left: 16px; border-left: 1px solid var(--line); overflow-wrap: anywhere }
+  .small { color: var(--muted); font-size: 13px; line-height: 1.6 }
+  .mono, code, textarea { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere }
+  code { padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--inset) }
+
+  .card { min-width: 0; padding: 25px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); box-shadow: var(--shadow); scroll-margin-top: 24px }
+  #setup { max-width: 850px; margin: 0 auto; padding: 34px }
+  .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px }
+  .card-title { display: flex; align-items: center; gap: 12px; min-width: 0 }
+  h2 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; letter-spacing: -.025em }
+  .section-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 10px; color: var(--accent); background: var(--accent-soft) }
+  .section-icon svg { width: 18px; height: 18px }
+  .section-number { color: var(--muted); font: 10px/1 'IBM Plex Mono', monospace; letter-spacing: .12em; white-space: nowrap }
+  .card > p { margin: 0 0 14px }
+  .card > p:last-child { margin-bottom: 0 }
+  h3.small { margin: 24px 0 8px; color: var(--fg); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase }
+  .setup-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 18px }
+  .setup-heading .section-icon { width: 44px; height: 44px; border-radius: 13px }
+  .setup-heading .eyebrow { margin-bottom: 4px; font-size: 8px }
+  .setup-heading .eyebrow::before { display: none }
+  .setup-heading h2 { font-size: 25px }
+  .setup-copy { max-width: 690px }
+  .create-row { padding: 18px 0 4px }
+  .create-row button { min-height: 46px; padding-inline: 20px }
+  .create-row button span { margin-left: 16px }
+  .or { display: flex; align-items: center; gap: 12px; margin: 22px 0 8px; color: var(--muted); font: 9px/1.4 'IBM Plex Mono', monospace; letter-spacing: .12em; text-transform: uppercase }
+  .or::after { content: ''; height: 1px; flex: 1; background: var(--line) }
+
+  #main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px }
+  .workspace-nav { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 56px; margin-bottom: 2px; padding: 7px 9px 7px 17px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--card) 88%, transparent); box-shadow: 0 5px 20px rgba(23, 32, 51, .025) }
+  .workspace-title { color: var(--fg); font: 500 10px/1 'IBM Plex Mono', monospace; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap }
+  .workspace-title::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 9px; border-radius: 2px; background: var(--accent); box-shadow: 5px -5px 0 var(--accent-soft) }
+  .workspace-links { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none }
+  .workspace-links::-webkit-scrollbar { display: none }
+  .workspace-links a { flex: none; padding: 7px 10px; border-radius: 7px; color: var(--muted); font-size: 12px; font-weight: 500; text-decoration: none }
+  .workspace-links a:hover { color: var(--accent); background: var(--accent-soft) }
+  #guide { border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); background: linear-gradient(125deg, var(--accent-soft), var(--card) 58%) }
+  .steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 20px 0 16px; padding: 0; list-style: none }
+  .steps li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 11px; align-items: start; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--card) 86%, transparent) }
+  .steps .mark { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); background: var(--card); font: 500 11px/1 'IBM Plex Mono', monospace }
+  .steps .done .mark { border-color: var(--ok); color: var(--on-accent); background: var(--ok) }
+  .steps .done .what { color: var(--muted) }
+  .steps .what { min-width: 0; color: var(--muted); font-size: 12px; line-height: 1.55 }
+  .steps .what b { display: block; margin-bottom: 3px; color: var(--fg); font-size: 13px; font-weight: 600 }
+  .steps .quiet { min-height: 32px; padding: 5px 9px; font-size: 11px }
+
+  .row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 14px }
+  .row > button { flex: 0 0 auto }
+  label { display: grid; flex: 1 1 155px; gap: 7px; min-width: 0; color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.45 }
+  input, select, textarea { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 9px; outline: none; color: var(--fg); background: var(--field); font-size: 13px; transition: border-color .18s, box-shadow .18s, background .18s }
+  input:hover, select:hover, textarea:hover { border-color: var(--muted) }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--focus) }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .65 }
+  textarea { min-height: 105px; resize: vertical; line-height: 1.65 }
+  input[type='file'] { padding: 6px 7px; font-size: 11px }
+  input[type='file']::file-selector-button { margin-right: 9px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); background: var(--inset); font: 500 11px 'DM Sans', sans-serif; cursor: pointer }
+  button { min-height: 42px; padding: 10px 16px; border: 1px solid transparent; border-radius: 9px; color: var(--on-accent); background: var(--accent); box-shadow: 0 4px 12px var(--focus); font-size: 13px; font-weight: 600; line-height: 1.35; cursor: pointer; transition: transform .18s, background .18s, border-color .18s, box-shadow .18s }
+  button:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 6px 16px var(--focus); transform: translateY(-1px) }
+  button:active:not(:disabled) { transform: translateY(0) }
+  button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px }
+  button.quiet { border-color: var(--line-strong); color: var(--accent); background: transparent; box-shadow: none }
+  button.quiet:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); box-shadow: none }
+  button:disabled { opacity: .45; cursor: not-allowed }
+  #wipe { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)) }
+  #wipe-yes { background: var(--bad) }
+
+  .address-block { margin: 18px 0 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 11px; background: var(--inset) }
+  .field-caption { display: block; margin-bottom: 6px; color: var(--muted); font: 500 8px/1.4 'IBM Plex Mono', monospace; letter-spacing: .13em }
+  #address { margin: 0; color: var(--fg); font-size: 12px; line-height: 1.7 }
+  .scroll { max-width: 100%; margin-top: 12px; overflow-x: auto }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.55 }
+  th, td { padding: 11px 10px; border-top: 1px solid var(--line); text-align: left; vertical-align: top }
+  th:first-child, td:first-child { padding-left: 0 }
+  th:last-child, td:last-child { padding-right: 0 }
+  th { border-top: 0; border-bottom: 1px solid var(--line); color: var(--muted); font: 500 9px/1.4 'IBM Plex Mono', monospace; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap }
+  #assets td:nth-child(2), #coins td:nth-child(2) { white-space: nowrap }
+  #assets .mono.small { font-size: 10px }
+  details { margin-top: 20px; padding-top: 3px; border-top: 1px solid var(--line) }
+  summary { position: relative; padding: 16px 28px 10px 0; color: var(--fg); font-size: 13px; font-weight: 600; list-style: none; cursor: pointer }
+  summary::-webkit-details-marker { display: none }
+  summary::after { content: '+'; position: absolute; top: 12px; right: 2px; color: var(--accent); font: 400 22px/1 'DM Sans', sans-serif; transition: transform .2s }
+  details[open] summary { color: var(--accent) }
+  details[open] summary::after { transform: rotate(45deg) }
+  .msg { margin-top: 16px; padding: 13px 15px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--inset); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere }
+  .msg.ok { border-left-color: var(--ok); background: var(--ok-soft) }
+  .msg.warn { border-left-color: var(--warn); background: var(--warn-soft) }
+  .msg.bad { border-left-color: var(--bad); background: var(--bad-soft) }
+  .msg .row, #sent .row, #open-invoices .row, #plain-sent .row { align-items: center }
+  .tag { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: 11px }
+  .qr { display: inline-block; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); line-height: 0 }
+  .qr svg { width: 180px; height: 180px; max-width: 100% }
+  #seed { margin: 16px 0 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--warn-soft) }
+  #open-invoices > .row, #sent > .row, #plain-sent > .row { margin-top: 0; padding: 12px 0; border-bottom: 1px solid var(--line) }
+  #open-invoices > .row:last-child, #sent > .row:last-child, #plain-sent > .row:last-child { border-bottom: 0 }
+  #invoice-out .mono { max-height: 150px; overflow-y: auto }
+
+  .footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-top: 42px; padding: 28px 0 42px; border-top: 1px solid var(--line) }
+  .footer-brand { display: flex; align-items: center; gap: 10px; flex: none }
+  .footer-flags { display: flex; gap: 3px; width: 32px; height: 10px }
+  .footer-flags i { flex: 1; clip-path: polygon(0 0, 100% 0, 50% 100%); background: var(--f1) }
+  .footer-flags i:nth-child(2) { background: var(--f2) }
+  .footer-flags i:nth-child(3) { background: var(--f3) }
+  .footer-flags i:nth-child(4) { background: var(--f4) }
+  .footer-brand span { color: var(--fg); font-size: 13px; font-weight: 600 }
+  .footer p { max-width: 610px; margin: 0; font-size: 12px }
+  .footer-links { display: flex; gap: 18px; flex: none; font-size: 12px; font-weight: 500 }
+  .footer-links a { text-decoration: none }
+
+  @media (min-width: 1000px) {
+    #main { grid-template-columns: repeat(12, minmax(0, 1fr)) }
+    #main > * { grid-column: 1 / -1 }
+    #coins-card { grid-column: span 7 }
+    #assets-card { grid-column: span 5 }
+    #receive-card, #pay-card, #send-card, #wallet-card { grid-column: span 6 }
+  }
+  @media (max-width: 999px) {
+    .hero { grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr); min-height: 350px }
+    .hero-art { max-width: 350px }
+    .float-chip { padding: 9px 11px }
+    .chip-local { left: 0 }
+  }
+  @media (max-width: 760px) {
+    .shell { padding-right: max(18px, env(safe-area-inset-right, 0px)); padding-left: max(18px, env(safe-area-inset-left, 0px)) }
+    .topbar { min-height: 76px }
+    .brand-tag, .source-link { display: none }
+    .topbar-actions { gap: 10px }
+    .hero { display: block; min-height: 0; padding: 48px 0 38px }
+    .hero-art { display: none }
+    h1 { margin-top: 15px; font-size: clamp(43px, 13vw, 62px) }
+    .lede { font-size: 15px }
+    .connection-bar { align-items: flex-start; flex-wrap: wrap }
+    #wallet-name { width: 100%; max-width: none; padding: 8px 0 0 44px; border-left: 0 }
+    .workspace-nav { display: block; padding: 12px }
+    .workspace-title { display: block; margin: 0 5px 10px }
+    .workspace-links { margin: 0 -4px }
+    .card, #setup { padding: 21px; border-radius: 15px }
+    .steps { grid-template-columns: 1fr }
+    .footer { flex-wrap: wrap; gap: 16px; margin-top: 30px }
+    .footer p { order: 3; width: 100% }
+  }
+  @media (max-width: 520px) {
+    .brand-name { font-size: 21px }
+    .brand-mark { width: 36px; height: 36px }
+    .network-badge { padding: 6px 9px; font-size: 9px }
+    .hero { padding-top: 40px }
+    .hero-points { display: grid; gap: 9px }
+    .connection-bar { margin-bottom: 20px }
+    .row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch }
+    .row > label { width: 100% }
+    .row > button { width: 100% }
+    .msg .row, #sent .row, #open-invoices .row, #plain-sent .row { display: flex; align-items: flex-start }
+    .msg .row > button, #sent .row > button, #open-invoices .row > button, #plain-sent .row > button { width: auto }
+    .steps li { grid-template-columns: 26px minmax(0, 1fr) }
+    .steps li > button, .steps li > span:last-child { grid-column: 2; justify-self: start }
+    .section-number { display: none }
+    .card-heading { gap: 8px }
+    .setup-heading h2 { font-size: 23px }
+    .create-row { display: flex }
+    .create-row button { width: 100% }
+    th, td { padding: 10px 8px }
+    .footer-links { margin-left: auto }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto }
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important }
+  }
+  @keyframes enter { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+  @keyframes float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-7px) } }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#wallet-content">Skip to wallet</a>
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Bunting home">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect width="40" height="40" rx="12" fill="var(--logo)"/>
+        <path d="M7 10.5Q20 20 33 10.5" fill="none" stroke="var(--logo-string)" stroke-width="1.2" opacity=".7"/>
+        <path d="M9 12.2L15.2 14.4L10.8 22.4Z" fill="var(--f1)"/>
+        <path d="M16.8 15.4L23.2 15.4L20 24Z" fill="var(--f2)"/>
+        <path d="M24.8 14.4L31 12.2L29.2 22.4Z" fill="var(--f4)"/>
+      </svg>
+      <span class="brand-name">Bunting</span>
+      <span class="brand-tag">RGB wallet</span>
+    </a>
+    <div class="topbar-actions">
+      <span class="network-badge"><i aria-hidden="true"></i> TESTNET4</span>
+      <a class="source-link" href="https://github.com/bitcoin-blake/bunting">View source <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 12L12 4M5 4H12V11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    </div>
+  </header>
+
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <p class="eyebrow">Bitcoin-native asset wallet</p>
+      <h1 id="hero-title">RGB assets,<br><span>in full colour.</span></h1>
+      <p class="lede">Issue, invoice, pay and receive RGB assets on the Bitcoin BLAKE2b chain. One beautifully simple wallet, entirely in this tab.</p>
+      <div class="hero-points">
+        <span class="hero-point"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="8" width="12" height="9" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 8V6a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Keys stay in your browser</span>
+        <span class="hero-point"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2.5L17 6V10C17 13.5 14 16.5 10 17.5C6 16.5 3 13.5 3 10V6L10 2.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 10L9 12L13 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Test coins only</span>
+      </div>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <div class="art-frame">
+        <svg class="hero-illustration" viewBox="0 0 480 330" fill="none">
+          <ellipse cx="240" cy="291" rx="158" ry="15" fill="var(--accent)" opacity=".08"/>
+          <path d="M32 50Q240 360 448 50" stroke="var(--hero-string)" stroke-width="2" stroke-linecap="round"/>
+          <g transform="translate(78 106) rotate(49)">
+            <path d="M-30 0H30L0 84Z" fill="var(--f1)"/>
+            <path d="M-30 0H0V84Z" fill="white" opacity=".1"/>
+          </g>
+          <g transform="translate(153 177) rotate(32)">
+            <path d="M-30 0H30L0 84Z" fill="var(--f2)"/>
+            <path d="M-30 0H0V84Z" fill="white" opacity=".1"/>
+          </g>
+          <g transform="translate(240 205)">
+            <path d="M-30 0H30L0 84Z" fill="var(--f3)"/>
+            <path d="M-30 0H0V84Z" fill="white" opacity=".1"/>
+          </g>
+          <g transform="translate(327 177) rotate(-32)">
+            <path d="M-30 0H30L0 84Z" fill="var(--f4)"/>
+            <path d="M-30 0H0V84Z" fill="white" opacity=".1"/>
+          </g>
+          <g transform="translate(402 106) rotate(-49)">
+            <path d="M-30 0H30L0 84Z" fill="var(--f5)"/>
+            <path d="M-30 0H0V84Z" fill="white" opacity=".1"/>
+          </g>
+          <circle cx="32" cy="50" r="4" fill="var(--hero-string)"/>
+          <circle cx="448" cy="50" r="4" fill="var(--hero-string)"/>
+        </svg>
+        <div class="float-chip chip-rgb"><span class="rgb-dot"></span><span><b>RGB</b><small>ASSET LAYER</small></span></div>
+        <div class="float-chip chip-local"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="11" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 10V7a4 4 0 018 0v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span><b>Client-side</b><small>SIGNED IN THIS TAB</small></span></div>
+      </div>
+    </div>
   </section>
 
-  <div id="main" hidden>
-    <section class="card" id="guide" hidden>
-      <h2>Getting started</h2>
-      <p class="small">Four steps to a first RGB payment on the BLAKE2b testnet4. Each ticks itself off.</p>
-      <ol class="steps" id="guide-steps"></ol>
-      <div class="row"><button class="quiet" id="guide-hide">Hide this</button></div>
-    </section>
+  <main id="wallet-content">
+    <div class="connection-bar">
+      <span class="connection-mark" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="M3 10H7L9 5L12 14L14 10H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <div class="connection-copy"><span class="connection-label">CHAIN STATUS</span><p id="chain" role="status">Connecting to the chain…</p></div>
+      <p class="small" id="wallet-name" hidden></p>
+    </div>
 
-    <section class="card" id="coins-card">
-      <h2>Coins</h2>
-      <p class="small">Send txbt4 to this address. Each coin can carry one RGB asset.</p>
-      <p class="mono" id="address"></p>
-      <div class="row"><button class="quiet" id="copy-address">Copy address</button><button class="quiet" id="show-address-qr">QR code</button><button class="quiet" id="refresh">Refresh</button></div>
-      <div id="address-qr" hidden></div>
-      <div class="scroll"><table id="coins"></table></div>
-    </section>
-
-    <section class="card" id="assets-card">
-      <h2>Assets</h2>
-      <div class="scroll"><table id="assets"></table></div>
-      <details style="margin-top:12px"><summary>Issue a new token</summary>
-        <div class="row">
-          <label>Kind<select id="i-kind"><option value="FNA">RGB20 token: a ticker, fixed supply</option><option value="UFA">RGB25 asset: no ticker, with terms</option></select></label>
-        </div>
-        <div class="row">
-          <label id="i-ticker-wrap">Ticker<input id="i-ticker" value="FLAG" maxlength="8"></label>
-          <label>Name<input id="i-name" value="Bunting Flags" maxlength="40"></label>
-        </div>
-        <div class="row" id="i-details-wrap" hidden><label>Terms or description (shown to holders, not verified)<input id="i-details" value="Club shares, one vote each." maxlength="200"></label></div>
-        <div class="row">
-          <label>Supply<input id="i-supply" value="1000" inputmode="numeric"></label>
-          <label>Decimal places<select id="i-precision"><option value="0">0</option><option value="2">2</option><option value="8">8</option></select></label>
-          <label>On coin<select id="i-coin"></select></label>
-        </div>
-        <div class="row"><button id="issue">Issue</button></div>
-        <div id="issue-out"></div>
-      </details>
-    </section>
-
-    <section class="card" id="receive-card">
-      <h2>Receive</h2>
-      <div class="row">
-        <label>Asset<select id="r-asset"></select></label>
-        <label>Amount<input id="r-amount" value="10" inputmode="numeric"></label>
-        <label>Expires in<select id="r-expiry"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="604800">1 week</option><option value="">never</option></select></label>
-        <button id="invoice">Make an invoice</button>
+    <section class="card" id="setup" hidden>
+      <div class="setup-heading">
+        <span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="12" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M12 12H21M17 12V15M20 12V14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+        <div><p class="eyebrow">Your keys, this tab</p><h2>Start a wallet</h2></div>
       </div>
-      <div id="invoice-out"></div>
-      <div id="open-invoices"></div>
-      <p class="small" id="inbox-note">Transfers sent to this wallet over Nostr are taken in as they arrive while this tab is open, and when it refreshes.</p>
-      <div class="row"><label>Got a transfer file? Take it in<input type="file" id="accept-file" accept=".rgb"></label></div>
-      <div id="accept-out"></div>
+      <p class="setup-copy">A random seed is made and kept in this tab. It holds the keys to your coins and the secrets of your RGB assets: back it up.</p>
+      <div class="row create-row"><button id="create">Create a wallet <span aria-hidden="true">→</span></button></div>
+      <div class="or">Or restore an existing wallet</div>
+      <div class="row"><label>From a seed (64 hex characters)<input id="restore-seed" class="mono" autocomplete="off" placeholder="Enter your recovery seed"></label><button class="quiet" id="restore">Restore</button></div>
+      <div class="row"><label>From a wallet backup file<input type="file" id="vault-file" accept=".json,application/json"></label><label>Its passphrase<input type="password" id="vault-pass" autocomplete="off" placeholder="Backup passphrase"></label><button class="quiet" id="vault-restore">Restore</button></div>
+      <div id="vault-out"></div>
     </section>
 
-    <section class="card" id="pay-card">
-      <h2>Pay</h2>
-      <label>Invoice<textarea id="p-invoice" placeholder="contract:tb@…"></textarea></label>
-      <div class="row"><label>Payee's Nostr key, to send them the transfer (optional; pay links include it)<input id="p-to" class="mono" placeholder="64 hex characters" autocomplete="off"></label></div>
-      <div class="row"><label>Fee rate (sat/vB)<input id="p-rate" value="1" inputmode="decimal"></label><button id="build">Build the payment</button></div>
-      <div id="pay-out"></div>
-      <div id="sent"></div>
-    </section>
+    <div id="main" hidden>
+      <nav class="workspace-nav" aria-label="Wallet sections">
+        <span class="workspace-title">Wallet workspace</span>
+        <div class="workspace-links"><a href="#coins-card">Coins</a><a href="#assets-card">Assets</a><a href="#receive-card">Receive</a><a href="#pay-card">Pay</a><a href="#send-card">Send tBTC</a><a href="#wallet-card">Backup</a></div>
+      </nav>
 
-    <section class="card">
-      <h2>Send tBTC</h2>
-      <p class="small">Spends only coins that carry no asset and aren't waiting for an invoice to be paid, so no RGB asset can be lost here.</p>
-      <div class="row">
-        <label>To address<input id="s-to" class="mono" placeholder="tb1…" autocomplete="off"></label>
-        <label>Amount (sats)<input id="s-amount" inputmode="numeric" placeholder="10000"></label>
-      </div>
-      <div class="row">
-        <label>Fee rate (sat/vB)<input id="s-rate" value="2" inputmode="decimal"></label>
-        <button id="s-build">Build</button>
-      </div>
-      <div class="row">
-        <label>Or split into spare coins of (sats)<input id="s-split-size" value="3000" inputmode="numeric"></label>
-        <label>How many<input id="s-split-n" value="3" inputmode="numeric"></label>
-        <button class="quiet" id="s-split">Split</button>
-      </div>
-      <p class="small">Spare coins are for invoices and new assets: each coin carries at most one asset.</p>
-      <div id="send-out"></div>
-      <div id="plain-sent"></div>
-    </section>
+      <section class="card" id="guide" hidden>
+        <div class="card-heading"><div class="card-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3V5M12 19V21M3 12H5M19 12H21M5.6 5.6L7 7M17 17L18.4 18.4M18.4 5.6L17 7M7 17L5.6 18.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.6"/></svg></span><h2>Getting started</h2></div><span class="section-number">YOUR FIRST PAYMENT</span></div>
+        <p class="small">Four steps to a first RGB payment on the BLAKE2b testnet4. Each ticks itself off.</p>
+        <ol class="steps" id="guide-steps"></ol>
+        <div class="row"><button class="quiet" id="guide-hide">Hide this</button></div>
+      </section>
 
-    <section class="card">
-      <h2>This wallet</h2>
-      <p class="small">Explorer: <span id="api"></span>. Add <code>?api=&lt;Esplora URL&gt;</code> to use another, or <code>?wallet=&lt;name&gt;</code> for a separate wallet in this browser.</p>
-      <p class="small">The whole-wallet backup holds everything, encrypted with your passphrase: the seed and the assets. Make a new one after each payment. The seed alone brings back the keys but not the assets; the asset backup alone brings back the assets to a wallet that already has the seed.</p>
-      <div class="row"><label>Passphrase<input type="password" id="vault-new" autocomplete="new-password"></label><label>Again<input type="password" id="vault-new2" autocomplete="new-password"></label><button id="vault-save">Back up the whole wallet</button></div>
-      <div id="vault-save-out"></div>
-      <div class="row"><button class="quiet" id="backup">Back up assets</button><label>Restore assets from a backup<input type="file" id="restore-file" accept=".json,application/json"></label></div>
-      <div id="backup-out"></div>
-      <div class="row"><button class="quiet" id="show-seed">Show the seed</button><button class="quiet" id="wipe">Remove this wallet from the tab</button></div>
-      <p class="mono" id="seed" hidden></p>
-      <div id="wipe-confirm" hidden class="msg bad">This deletes the seed and every asset file from this tab. Without a backup of the seed, the coins and assets are gone. <div class="row"><button id="wipe-yes">Delete it</button><button class="quiet" id="wipe-no">Keep it</button></div></div>
-    </section>
-    <p class="small">Bunting uses <a href="https://rgbjs.com">rgbjs</a> for RGB and signs and broadcasts here. <a href="test.html">Tests</a> · <a href="https://github.com/bitcoin-blake/bunting">Source</a></p>
-  </div>
+      <section class="card" id="coins-card">
+        <div class="card-heading"><div class="card-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="6.5" rx="7" ry="3" stroke="currentColor" stroke-width="1.5"/><path d="M5 6.5V12C5 13.65 8.13 15 12 15C15.87 15 19 13.65 19 12V6.5M5 12V17.5C5 19.15 8.13 20.5 12 20.5C15.87 20.5 19 19.15 19 17.5V12" stroke="currentColor" stroke-width="1.5"/><path d="M5 12C5 13.65 8.13 15 12 15C15.87 15 19 13.65 19 12" stroke="currentColor" stroke-width="1.5"/></svg></span><h2>Coins</h2></div><span class="section-number">01 / FUND</span></div>
+        <p class="small">Send txbt4 to this address. Each coin can carry one RGB asset.</p>
+        <div class="address-block"><span class="field-caption">YOUR RECEIVING ADDRESS</span><p class="mono" id="address"></p></div>
+        <div class="row"><button class="quiet" id="copy-address">Copy address</button><button class="quiet" id="show-address-qr">QR code</button><button class="quiet" id="refresh">Refresh</button></div>
+        <div id="address-qr" hidden></div>
+        <div class="scroll"><table id="coins"></table></div>
+      </section>
+
+      <section class="card" id="assets-card">
+        <div class="card-heading"><div class="card-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3L21 8L12 13L3 8L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 12L12 17L21 12M3 16L12 21L21 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h2>Assets</h2></div><span class="section-number">02 / ISSUE</span></div>
+        <div class="scroll"><table id="assets"></table></div>
+        <details><summary>Issue a new token</summary>
+          <div class="row"><label>Kind<select id="i-kind"><option value="FNA">RGB20 token: a ticker, fixed supply</option><option value="UFA">RGB25 asset: no ticker, with terms</option></select></label></div>
+          <div class="row"><label id="i-ticker-wrap">Ticker<input id="i-ticker" value="FLAG" maxlength="8"></label><label>Name<input id="i-name" value="Bunting Flags" maxlength="40"></label></div>
+          <div class="row" id="i-details-wrap" hidden><label>Terms or description (shown to holders, not verified)<input id="i-details" value="Club shares, one vote each." maxlength="200"></label></div>
+          <div class="row"><label>Supply<input id="i-supply" value="1000" inputmode="numeric"></label><label>Decimal places<select id="i-precision"><option value="0">0</option><option value="2">2</option><option value="8">8</option></select></label><label>On coin<select id="i-coin"></select></label></div>
+          <div class="row"><button id="issue">Issue</button></div>
+          <div id="issue-out"></div>
+        </details>
+      </section>
+
+      <section class="card" id="receive-card">
+        <div class="card-heading"><div class="card-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3V15M7 10L12 15L17 10M4 16V19C4 20.1 4.9 21 6 21H18C19.1 21 20 20.1 20 19V16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h2>Receive</h2></div><span class="section-number">03 / INVOICE</span></div>
+        <div class="row"><label>Asset<select id="r-asset"></select></label><label>Amount<input id="r-amount" value="10" inputmode="numeric"></label><label>Expires in<select id="r-expiry"><option value="3600">1 hour</option><option value="86400" selected>1 day</option><option value="604800">1 week</option><option value="">never</option></select></label><button id="invoice">Make an invoice</button></div>
+        <div id="invoice-out"></div>
+        <div id="open-invoices"></div>
+        <p class="small" id="inbox-note">Transfers sent to this wallet over Nostr are taken in as they arrive while this tab is open, and when it refreshes.</p>
+        <div class="row"><label>Got a transfer file? Take it in<input type="file" id="accept-file" accept=".rgb"></label></div>
+        <div id="accept-out"></div>
+      </section>
+
+      <section class="card" id="pay-card">
+        <div class="card-heading"><div class="card-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 19L19 5M8 5H19V16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 5V9M5 5H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><h2>Pay</h2></div><span class="section-number">04 / TRANSFER</span></div>
+        <label>Invoice<textarea id="p-invoice" placeholder="contract:tb@…"></textarea></label>
+        <div class="row"><label>Payee's Nostr key, to send them the transfer (optional; pay links include it)<input id="p-to" class="mono" placeholder="64 hex characters" autocomplete="off"></label></div>
+        <div class="row"><label>Fee rate (sat/vB)<input id="p-rate" value="1" inputmode="decimal"></label><button id="build">Build the payment</button></div>
+        <div id="pay-out"></div>
+        <div id="sent"></div>
+      </section>
+
+      <section class="card" id="send-card">
+        <div class="card-heading"><div class="card-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12H20M14 6L20 12L14 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 7V17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><h2>Send tBTC</h2></div><span class="section-number">05 / SPEND</span></div>
+        <p class="small">Spends only coins that carry no asset and aren't waiting for an invoice to be paid, so no RGB asset can be lost here.</p>
+        <div class="row"><label>To address<input id="s-to" class="mono" placeholder="tb1…" autocomplete="off"></label><label>Amount (sats)<input id="s-amount" inputmode="numeric" placeholder="10000"></label></div>
+        <div class="row"><label>Fee rate (sat/vB)<input id="s-rate" value="2" inputmode="decimal"></label><button id="s-build">Build</button></div>
+        <div class="or">Or prepare spare coins</div>
+        <div class="row"><label>Split into spare coins of (sats)<input id="s-split-size" value="3000" inputmode="numeric"></label><label>How many<input id="s-split-n" value="3" inputmode="numeric"></label><button class="quiet" id="s-split">Split</button></div>
+        <p class="small">Spare coins are for invoices and new assets: each coin carries at most one asset.</p>
+        <div id="send-out"></div>
+        <div id="plain-sent"></div>
+      </section>
+
+      <section class="card" id="wallet-card">
+        <div class="card-heading"><div class="card-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3L20 7V12C20 16.5 16.5 20 12 21C7.5 20 4 16.5 4 12V7L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M12.5 11H16M14 11V13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span><h2>This wallet</h2></div><span class="section-number">06 / PROTECT</span></div>
+        <p class="small">Explorer: <span id="api"></span>. Add <code>?api=&lt;Esplora URL&gt;</code> to use another, or <code>?wallet=&lt;name&gt;</code> for a separate wallet in this browser.</p>
+        <p class="small">The whole-wallet backup holds everything, encrypted with your passphrase: the seed and the assets. Make a new one after each payment. The seed alone brings back the keys but not the assets; the asset backup alone brings back the assets to a wallet that already has the seed.</p>
+        <div class="row"><label>Passphrase<input type="password" id="vault-new" autocomplete="new-password"></label><label>Again<input type="password" id="vault-new2" autocomplete="new-password"></label><button id="vault-save">Back up the whole wallet</button></div>
+        <div id="vault-save-out"></div>
+        <div class="row"><button class="quiet" id="backup">Back up assets</button><label>Restore assets from a backup<input type="file" id="restore-file" accept=".json,application/json"></label></div>
+        <div id="backup-out"></div>
+        <div class="row"><button class="quiet" id="show-seed">Show the seed</button><button class="quiet" id="wipe">Remove this wallet from the tab</button></div>
+        <p class="mono" id="seed" hidden></p>
+        <div id="wipe-confirm" hidden class="msg bad">This deletes the seed and every asset file from this tab. Without a backup of the seed, the coins and assets are gone. <div class="row"><button id="wipe-yes">Delete it</button><button class="quiet" id="wipe-no">Keep it</button></div></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-brand"><div class="footer-flags" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span>Bunting</span></div>
+    <p class="small">Bunting uses <a href="https://rgbjs.com">rgbjs</a> for RGB and signs and broadcasts here.<br>Your wallet, your browser, your assets.</p>
+    <div class="footer-links"><a href="test.html">Tests</a><a href="https://github.com/bitcoin-blake/bunting">Source</a></div>
+  </footer>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module" src="app.js"></script>
+</body>
 </html>
